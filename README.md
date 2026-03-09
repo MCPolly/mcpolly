@@ -68,13 +68,7 @@ Binaries will be at:
 - `target/release/mcpolly` (HTTP server)
 - `target/release/mcpolly_mcp` (MCP stdio bridge)
 
-### Option 2: Install Script
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/user/mcpolly/main/install.sh | bash
-```
-
-### Option 3: Cargo Install
+### Option 2: Cargo Install
 
 ```bash
 cargo install mcpolly --bin mcpolly_mcp
