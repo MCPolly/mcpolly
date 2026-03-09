@@ -149,13 +149,14 @@ download_binary() {
 
 verify_checksum() {
     local file="$1"
+    local asset_name="$2"
     local checksums_url="https://github.com/${REPO}/releases/download/${VERSION}/checksums.sha256"
 
     local checksums_file
     checksums_file="$(mktemp)"
     if curl -fsSL -o "${checksums_file}" "${checksums_url}" 2>/dev/null; then
         local expected
-        expected=$(grep "$(basename "$file")" "${checksums_file}" | awk '{print $1}')
+        expected=$(grep "${asset_name}" "${checksums_file}" | awk '{print $1}')
         if [ -n "$expected" ]; then
             local actual
             if command -v sha256sum &>/dev/null; then
@@ -175,7 +176,7 @@ verify_checksum() {
                 error "Checksum mismatch! Expected: ${expected}, Got: ${actual}"
             fi
         else
-            warn "No checksum entry found for $(basename "$file") — skipping verification"
+            warn "No checksum entry found for ${asset_name} — skipping verification"
         fi
     else
         warn "Checksums file not available — skipping verification"
@@ -260,7 +261,7 @@ main() {
         [ "$os" = "windows" ] && server_dest="${server_dest}.exe"
 
         if download_binary "mcpolly" "$server_asset" "$server_dest"; then
-            verify_checksum "$server_dest"
+            verify_checksum "$server_dest" "$server_asset"
             ok "Installed mcpolly server → ${server_dest}"
             installed_server=true
         else
@@ -276,7 +277,7 @@ main() {
         [ "$os" = "windows" ] && mcp_dest="${mcp_dest}.exe"
 
         if download_binary "mcpolly_mcp" "$mcp_asset" "$mcp_dest"; then
-            verify_checksum "$mcp_dest"
+            verify_checksum "$mcp_dest" "$mcp_asset"
             ok "Installed mcpolly_mcp bridge → ${mcp_dest}"
             installed_mcp=true
             mcp_path="$mcp_dest"
