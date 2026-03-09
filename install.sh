@@ -156,7 +156,7 @@ verify_checksum() {
     checksums_file="$(mktemp)"
     if curl -fsSL -o "${checksums_file}" "${checksums_url}" 2>/dev/null; then
         local expected
-        expected=$(grep "${asset_name}" "${checksums_file}" | awk '{print $1}')
+        expected=$(grep -F "  ${asset_name}" "${checksums_file}" | head -1 | awk '{print $1}')
         if [ -n "$expected" ]; then
             local actual
             if command -v sha256sum &>/dev/null; then
