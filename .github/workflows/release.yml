@@ -50,27 +50,12 @@ jobs:
             os: ubuntu-latest
             bins: mcpolly,mcpolly_mcp
 
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            bins: mcpolly,mcpolly_mcp
-            cross: true
-
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            bins: mcpolly,mcpolly_mcp
-            cross: true
-
-          - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
-            bins: mcpolly,mcpolly_mcp
-            cross: true
-
-          - target: x86_64-apple-darwin
-            os: macos-13
-            bins: mcpolly,mcpolly_mcp
-
           - target: aarch64-apple-darwin
             os: macos-14
+            bins: mcpolly,mcpolly_mcp
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
             bins: mcpolly,mcpolly_mcp
 
     steps:
@@ -84,17 +69,8 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Install cross
-        if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build (native)
-        if: "!matrix.cross"
+      - name: Build
         run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Build (cross)
-        if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }}
 
       - name: Package binaries
         shell: bash
