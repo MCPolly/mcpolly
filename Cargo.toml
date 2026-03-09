@@ -1,6 +1,6 @@
 [package]
 name = "mcpolly"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
@@ -22,7 +22,11 @@ sha2 = "0.10"
 hex = "0.4"
 rand = "0.8"
 base64 = "0.22"
-rmcp = { version = "1", features = ["server", "transport-io", "transport-streamable-http-server"] }
+rmcp = { version = "1", features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
 schemars = "1"
 sqlite-vec = "0.1"
 zerocopy = { version = "0.8", features = ["derive"] }

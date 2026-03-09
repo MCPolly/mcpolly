@@ -56,7 +56,30 @@ MCPolly exposes a `/mcp` endpoint that speaks the MCP Streamable HTTP protocol (
 
 ## Installation
 
-### Option 1: Build from Source
+### Option 1: Install Script (recommended)
+
+Detects your OS and architecture, downloads the correct binaries from GitHub Releases:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MCPolly/mcpolly/main/install.sh | bash
+```
+
+Customize with environment variables:
+
+```bash
+# Install only the MCP stdio bridge
+MCPOLLY_BINARY=mcp curl -fsSL https://raw.githubusercontent.com/MCPolly/mcpolly/main/install.sh | bash
+
+# Install to a custom directory
+MCPOLLY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/MCPolly/mcpolly/main/install.sh | bash
+
+# Install a specific version
+MCPOLLY_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/MCPolly/mcpolly/main/install.sh | bash
+```
+
+Supported platforms: Linux (x86_64, aarch64, armv7), macOS (x86_64, Apple Silicon), Windows (x86_64).
+
+### Option 2: Build from Source
 
 ```bash
 git clone https://github.com/MCPolly/mcpolly.git
@@ -68,7 +91,7 @@ Binaries will be at:
 - `target/release/mcpolly` (HTTP server)
 - `target/release/mcpolly_mcp` (MCP stdio bridge)
 
-### Option 2: Cargo Install
+### Option 3: Cargo Install
 
 ```bash
 cargo install mcpolly --bin mcpolly_mcp
