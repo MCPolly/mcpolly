@@ -145,8 +145,82 @@ If your platform doesn't support HTTP MCP transport, use the stdio binary:
 
 #### Claude Code
 
+MCPolly connects to Claude Code via HTTP transport. There are two ways to configure it.
+
+**Option A: CLI (user-level, available in all projects)**
+
 ```bash
-claude mcp add mcpolly --url http://localhost:3000/mcp --header "Authorization: Bearer your-api-key-here"
+claude mcp add mcpolly --transport http http://localhost:3000/mcp \
+  --header "Authorization: Bearer your-api-key-here"
+```
+
+**Option B: Project-level `.mcp.json` (checked into the repo)**
+
+Create `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "mcpolly": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+This makes MCPolly available to every Claude Code session in that project automatically — no per-user setup required.
+
+**Auto-approve MCPolly tools (no permission prompts):**
+
+Add `mcp__mcpolly__*` to the allow list in your project or user settings:
+
+```bash
+# Project-level (.claude/settings.json — shared with team)
+# or user-level (~/.claude/settings.json — personal)
+```
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__mcpolly__*"
+    ]
+  }
+}
+```
+
+This lets Claude Code call all MCPolly tools in the background without asking for confirmation each time.
+
+**Verify the connection:**
+
+```bash
+claude mcp list
+```
+
+MCPolly should appear with status `connected`. You can also test from within a Claude Code session:
+
+> "Use mcpolly to list all registered agents."
+
+**Automatic agent integration via CLAUDE.md**
+
+To have Claude Code automatically register itself and post status updates on every task, add the following to your project's `CLAUDE.md`:
+
+```markdown
+## Agent Observability
+
+At the start of every task:
+1. Call `register_agent` with your agent name and a brief description.
+2. Call `post_status` with state `starting` and a summary of the task.
+
+As you work, call `post_status` at major milestones (state: `running`).
+
+On completion, call `post_status` with state `completed`.
+
+If you encounter an unrecoverable error, call `post_error` before stopping.
 ```
 
 ### 5. Verify
