@@ -43,6 +43,7 @@ PRD_VECTOR_EMBEDDINGS.md
 PRD_UI_ENHANCEMENTS.md
 DESIGN_SPEC.md
 DESIGN_UI_ENHANCEMENTS.md
+PRD_*.md
 
 # Claude Code commands (internal development tooling)
 .claude/
