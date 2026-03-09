@@ -201,9 +201,14 @@ pub fn seed_default_key_if_empty(conn: &Connection) -> Option<String> {
         .unwrap();
 
         tracing::info!("No API keys found. Created default key.");
-        tracing::info!("=== DEFAULT API KEY (save this, it won't be shown again) ===");
-        tracing::info!("  {}", raw_key);
-        tracing::info!("=============================================================");
+        eprintln!();
+        eprintln!("╔═══════════════════════════════════════════════════════════════╗");
+        eprintln!("║  DEFAULT API KEY (save this — it will not be shown again!)   ║");
+        eprintln!("║                                                               ║");
+        eprintln!("║  {}  ║", raw_key);
+        eprintln!("║                                                               ║");
+        eprintln!("╚═══════════════════════════════════════════════════════════════╝");
+        eprintln!();
 
         Some(raw_key)
     } else {

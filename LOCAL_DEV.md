@@ -2,9 +2,13 @@
 
 ### Default API Key
 
+On first run, MCPolly generates a random API key and prints it to the console. **Save it — it won't be shown again.** The key below is for the existing dev database only:
+
 ```
 mcp_ixUKhIRUste0fdNvC2_77sY5-DLIKByV9MpXVJjSGSs
 ```
+
+If you delete `mcpolly.db` and restart, a new key will be generated.
 
 ### Prerequisites
 

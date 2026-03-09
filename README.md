@@ -123,7 +123,20 @@ The SQLite database (`mcpolly.db`) is created automatically on first run. The we
 
 ### 3. Get Your API Key
 
-On first run, a default API key is generated and printed to stdout. You can also create new keys through the web UI's Settings page.
+On first run, MCPolly generates a random API key and prints it to the console in a prominent banner:
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  DEFAULT API KEY (save this — it will not be shown again!)   ║
+║                                                               ║
+║  mcp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx          ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+**Save this key** — it is only displayed once on first startup. Each database has its own unique key; if you delete `mcpolly.db` and restart, a new key will be generated.
+
+You can also create additional keys through the web UI's Settings page (`http://localhost:3000/settings`).
 
 ### 4. Configure the MCP Client
 
