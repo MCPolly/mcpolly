@@ -54,6 +54,7 @@ MCPolly is an agent-native status, observability, and knowledge platform for AI 
 - `PRODUCT_DESIGN_AGENT.md` — Product design agent instructions
 - `BACKEND_AGENT.md` — Backend implementation agent instructions
 - `FRONTEND_AGENT.md` — Frontend implementation agent instructions
+- `GLOBAL_CLAUDE.md` — Global CLAUDE.md instructions for enabling MCPolly in all agent sessions
 
 ## UI Pages
 

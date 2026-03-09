@@ -223,7 +223,62 @@ On completion, call `post_status` with state `completed`.
 If you encounter an unrecoverable error, call `post_error` before stopping.
 ```
 
-### 5. Verify
+### 5. Enable MCPolly for All Agent Sessions (Global Setup)
+
+To have every Claude Code session — across all projects — automatically register and report status to MCPolly, configure both the MCP server and agent instructions globally.
+
+**Step 1: Add MCPolly as a global MCP server**
+
+```bash
+claude mcp add mcpolly --transport http http://localhost:3000/mcp \
+  --header "Authorization: Bearer your-api-key-here"
+```
+
+This makes the MCPolly MCP tools available in every Claude Code session without per-project `.mcp.json` files.
+
+**Step 2: Auto-approve MCPolly tools globally**
+
+Edit `~/.claude/settings.json` (create it if it doesn't exist):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__mcpolly__*"
+    ]
+  }
+}
+```
+
+This prevents Claude Code from prompting for permission each time it calls a MCPolly tool.
+
+**Step 3: Add agent instructions to your global CLAUDE.md**
+
+Append the contents of [`GLOBAL_CLAUDE.md`](GLOBAL_CLAUDE.md) to `~/.claude/CLAUDE.md` (create it if it doesn't exist):
+
+```bash
+cat /path/to/mcpolly/GLOBAL_CLAUDE.md >> ~/.claude/CLAUDE.md
+```
+
+Or manually add:
+
+```markdown
+## Agent Observability
+
+At the start of every task:
+1. Call `register_agent` with your agent name and a brief description.
+2. Call `post_status` with state `starting` and a summary of the task.
+
+As you work, call `post_status` at major milestones (state: `running`).
+
+On completion, call `post_status` with state `completed`.
+
+If you encounter an unrecoverable error, call `post_error` before stopping.
+```
+
+The global `~/.claude/CLAUDE.md` file is loaded into every Claude Code session automatically. With this in place, every agent — in any project — will register itself with MCPolly, post status updates as it works, and report completion or errors.
+
+### 6. Verify
 
 Open a new Cursor agent session and ask it to list agents:
 
