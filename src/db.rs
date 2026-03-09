@@ -131,6 +131,18 @@ fn run_migrations(conn: &Connection) {
 
         CREATE INDEX IF NOT EXISTS idx_alert_history_created_at ON alert_history(created_at);
 
+        CREATE TABLE IF NOT EXISTS stop_requests (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL REFERENCES agents(id),
+            requested_by TEXT NOT NULL DEFAULT 'operator',
+            reason TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            resolved_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_stop_requests_agent_id ON stop_requests(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_stop_requests_status ON stop_requests(status);
+
         CREATE TABLE IF NOT EXISTS embedding_documents (
             id TEXT PRIMARY KEY,
             source_type TEXT NOT NULL,

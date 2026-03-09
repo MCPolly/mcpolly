@@ -222,9 +222,14 @@
       background: var(--status-error-bg);
     }
 
-    .badge-offline, .badge-completed {
+    .badge-offline, .badge-completed, .badge-stopped {
       color: var(--status-offline-fg);
       background: var(--status-offline-bg);
+    }
+
+    .badge-stopping {
+      color: var(--status-warning-fg);
+      background: var(--status-warning-bg);
     }
 
     .badge-status {
@@ -598,7 +603,8 @@
     .status-dot-running { background: var(--status-running-fg); }
     .status-dot-errored, .status-dot-error { background: var(--status-error-fg); }
     .status-dot-starting, .status-dot-warning, .status-dot-paused { background: var(--status-warning-fg); }
-    .status-dot-completed, .status-dot-offline { background: var(--status-offline-fg); }
+    .status-dot-completed, .status-dot-offline, .status-dot-stopped { background: var(--status-offline-fg); }
+    .status-dot-stopping { background: var(--status-warning-fg); }
 
     /* Activity feed improvements */
     .activity-entry[data-type="status"],
@@ -616,6 +622,14 @@
 
     .activity-entry[data-type="warning"] {
       border-left-color: var(--status-warning-fg);
+    }
+
+    .activity-entry[data-type="stopping"] {
+      border-left-color: var(--status-warning-fg);
+    }
+
+    .activity-entry[data-type="stopped"] {
+      border-left-color: var(--status-offline-fg);
     }
 
     .activity-message.expandable {

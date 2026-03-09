@@ -79,6 +79,20 @@ struct SpawnAgentParams {
     task: String,
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct StopAgentParams {
+    #[schemars(description = "Agent ID to stop")]
+    agent_id: String,
+    #[schemars(description = "Optional reason for stopping the agent")]
+    reason: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct CheckStopParams {
+    #[schemars(description = "Agent ID to check for stop signal")]
+    agent_id: String,
+}
+
 // ─── MCP Handler with direct DB access ───
 
 #[derive(Clone)]
@@ -204,7 +218,29 @@ impl McPollyHandler {
             .await;
         }
 
-        json!({"status": "ok"}).to_string()
+        // Check for pending stop request
+        let stop_requested = {
+            let conn = self.db.get().unwrap();
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'",
+                    params![params.agent_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            count > 0
+        };
+
+        // If agent posted "stopped", acknowledge the stop request
+        if params.state == "stopped" {
+            let conn = self.db.get().unwrap();
+            conn.execute(
+                "UPDATE stop_requests SET status = 'acknowledged', resolved_at = datetime('now') WHERE agent_id = ?1 AND status = 'pending'",
+                params![params.agent_id],
+            ).ok();
+        }
+
+        json!({"status": "ok", "stop_requested": stop_requested}).to_string()
     }
 
     #[tool(description = "Report an error from an agent. Records the error and triggers configured alerts.")]
@@ -512,6 +548,78 @@ impl McPollyHandler {
             "context_chunks": context,
         })
         .to_string()
+    }
+
+    #[tool(description = "Request an agent to stop. Sets the agent to 'stopping' state and creates a stop request that the agent will detect on its next status check.")]
+    async fn stop_agent(
+        &self,
+        Parameters(params): Parameters<StopAgentParams>,
+    ) -> String {
+        let conn = self.db.get().unwrap();
+
+        let current_state: Option<String> = conn
+            .query_row("SELECT current_state FROM agents WHERE id = ?1", params![params.agent_id], |row| row.get(0))
+            .ok();
+
+        let state = match current_state {
+            Some(s) => s,
+            None => return json!({"error": "Agent not found"}).to_string(),
+        };
+
+        if !crate::models::is_stoppable_state(&state) {
+            return json!({"error": format!("Agent is in '{}' state and cannot be stopped", state)}).to_string();
+        }
+
+        let pending: i64 = conn
+            .query_row("SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'", params![params.agent_id], |row| row.get(0))
+            .unwrap_or(0);
+        if pending > 0 {
+            return json!({"error": "Agent already has a pending stop request"}).to_string();
+        }
+
+        let stop_id = Uuid::new_v4().to_string();
+        let reason = params.reason.unwrap_or_else(|| "Stop requested via MCP".to_string());
+
+        conn.execute(
+            "INSERT INTO stop_requests (id, agent_id, requested_by, reason) VALUES (?1, ?2, 'mcp', ?3)",
+            params![stop_id, params.agent_id, reason],
+        ).ok();
+
+        let status_id = Uuid::new_v4().to_string();
+        let msg = format!("Stop requested via MCP: {}", reason);
+        conn.execute(
+            "INSERT INTO status_updates (id, agent_id, state, message) VALUES (?1, ?2, 'stopping', ?3)",
+            params![status_id, params.agent_id, msg],
+        ).ok();
+        conn.execute(
+            "UPDATE agents SET current_state = 'stopping', last_message = ?1, last_update_at = datetime('now') WHERE id = ?2",
+            params![msg, params.agent_id],
+        ).ok();
+
+        json!({"stop_request_id": stop_id, "status": "pending"}).to_string()
+    }
+
+    #[tool(description = "Check if a stop signal has been requested for an agent. Returns stop_requested: true if a pending stop exists.")]
+    async fn check_stop_signal(
+        &self,
+        Parameters(params): Parameters<CheckStopParams>,
+    ) -> String {
+        let conn = self.db.get().unwrap();
+
+        let result = conn.query_row(
+            "SELECT reason, created_at FROM stop_requests WHERE agent_id = ?1 AND status = 'pending' LIMIT 1",
+            params![params.agent_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+
+        match result {
+            Ok((reason, requested_at)) => {
+                json!({"stop_requested": true, "reason": reason, "requested_at": requested_at}).to_string()
+            }
+            Err(_) => {
+                json!({"stop_requested": false}).to_string()
+            }
+        }
     }
 }
 

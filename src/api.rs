@@ -260,7 +260,164 @@ pub async fn set_agent_status(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
     })?;
 
-    Ok(Json(serde_json::json!({"status": "ok", "state": req.state})))
+    // Check for pending stop request
+    let stop_requested: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'",
+            params![id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|c| c > 0)
+        .unwrap_or(false);
+
+    // If agent posted "stopped", acknowledge the stop request
+    if req.state == "stopped" {
+        conn.execute(
+            "UPDATE stop_requests SET status = 'acknowledged', resolved_at = datetime('now') WHERE agent_id = ?1 AND status = 'pending'",
+            params![id],
+        ).ok();
+    }
+
+    Ok(Json(serde_json::json!({"status": "ok", "state": req.state, "stop_requested": stop_requested})))
+}
+
+// ─── Agent stop endpoints ───
+
+#[derive(Debug, Deserialize)]
+pub struct StopAgentRequest {
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default = "default_requested_by")]
+    pub requested_by: String,
+}
+
+fn default_requested_by() -> String {
+    "operator".to_string()
+}
+
+/// POST /api/v1/agents/:id/stop — request agent stop
+pub async fn stop_agent(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<String>,
+    Json(req): Json<StopAgentRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let conn = db.get().map_err(|e| {
+        tracing::error!("Pool error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+    })?;
+
+    let current_state: String = conn
+        .query_row("SELECT current_state FROM agents WHERE id = ?1", params![id], |row| row.get(0))
+        .map_err(|_| (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Agent not found"}))))?;
+
+    if !is_stoppable_state(&current_state) {
+        return Err((StatusCode::CONFLICT, Json(serde_json::json!({"error": format!("Agent is in '{}' state and cannot be stopped", current_state)}))));
+    }
+
+    let pending_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'", params![id], |row| row.get(0))
+        .unwrap_or(0);
+    if pending_count > 0 {
+        return Err((StatusCode::CONFLICT, Json(serde_json::json!({"error": "Agent already has a pending stop request"}))));
+    }
+
+    let stop_id = Uuid::new_v4().to_string();
+    let reason = if req.reason.trim().is_empty() { "Stop requested".to_string() } else { req.reason.trim().to_string() };
+
+    conn.execute(
+        "INSERT INTO stop_requests (id, agent_id, requested_by, reason) VALUES (?1, ?2, ?3, ?4)",
+        params![stop_id, id, req.requested_by, reason],
+    ).map_err(|e| {
+        tracing::error!("Insert error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+    })?;
+
+    let status_id = Uuid::new_v4().to_string();
+    let msg = format!("Stop requested by {}: {}", req.requested_by, reason);
+    conn.execute(
+        "INSERT INTO status_updates (id, agent_id, state, message) VALUES (?1, ?2, 'stopping', ?3)",
+        params![status_id, id, msg],
+    ).ok();
+    conn.execute(
+        "UPDATE agents SET current_state = 'stopping', last_message = ?1, last_update_at = datetime('now') WHERE id = ?2",
+        params![msg, id],
+    ).ok();
+
+    Ok(Json(serde_json::json!({"stop_request_id": stop_id, "status": "pending"})))
+}
+
+/// DELETE /api/v1/agents/:id/stop — cancel pending stop request
+pub async fn cancel_stop_agent(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let conn = db.get().map_err(|e| {
+        tracing::error!("Pool error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+    })?;
+
+    let affected = conn.execute(
+        "UPDATE stop_requests SET status = 'cancelled', resolved_at = datetime('now') WHERE agent_id = ?1 AND status = 'pending'",
+        params![id],
+    ).map_err(|e| {
+        tracing::error!("Update error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+    })?;
+
+    if affected == 0 {
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "No pending stop request found"}))));
+    }
+
+    // Revert agent to previous non-stopping state
+    let prev_state: String = conn
+        .query_row(
+            "SELECT state FROM status_updates WHERE agent_id = ?1 AND state != 'stopping' ORDER BY created_at DESC LIMIT 1",
+            params![id], |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "running".to_string());
+
+    let status_id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO status_updates (id, agent_id, state, message) VALUES (?1, ?2, ?3, 'Stop request cancelled')",
+        params![status_id, id, prev_state],
+    ).ok();
+    conn.execute(
+        "UPDATE agents SET current_state = ?1, last_message = 'Stop request cancelled', last_update_at = datetime('now') WHERE id = ?2",
+        params![prev_state, id],
+    ).ok();
+
+    Ok(Json(serde_json::json!({"status": "cancelled", "reverted_to": prev_state})))
+}
+
+/// GET /api/v1/agents/:id/stop — get current stop request status
+pub async fn get_stop_status(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let conn = db.get().map_err(|e| {
+        tracing::error!("Pool error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+    })?;
+
+    let result = conn.query_row(
+        "SELECT id, requested_by, reason, status, created_at, resolved_at FROM stop_requests WHERE agent_id = ?1 ORDER BY created_at DESC LIMIT 1",
+        params![id],
+        |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "requested_by": row.get::<_, String>(1)?,
+                "reason": row.get::<_, String>(2)?,
+                "status": row.get::<_, String>(3)?,
+                "created_at": row.get::<_, String>(4)?,
+                "resolved_at": row.get::<_, Option<String>>(5)?,
+            }))
+        },
+    );
+
+    match result {
+        Ok(val) => Ok(Json(val)),
+        Err(_) => Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "No stop request found"})))),
+    }
 }
 
 // ─── Alert JSON endpoints ───

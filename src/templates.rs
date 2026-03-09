@@ -960,6 +960,89 @@ pub async fn set_agent_status_html(
     )).into_response())
 }
 
+/// POST /agents/:id/stop — stop agent from UI (HTMX)
+pub async fn stop_agent_html(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<String>,
+) -> Result<Response, StatusCode> {
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let current_state: String = conn
+        .query_row("SELECT current_state FROM agents WHERE id = ?1", params![id], |row| row.get(0))
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
+    if !crate::models::is_stoppable_state(&current_state) {
+        return Ok(Html(format!(
+            r#"<div class="msg-error">Agent is in '{}' state and cannot be stopped.</div>"#,
+            current_state
+        )).into_response());
+    }
+
+    let pending: i64 = conn
+        .query_row("SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'", params![id], |row| row.get(0))
+        .unwrap_or(0);
+    if pending > 0 {
+        return Ok(Html(r#"<div class="msg-error">Agent already has a pending stop request.</div>"#.to_string()).into_response());
+    }
+
+    let stop_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO stop_requests (id, agent_id, requested_by, reason) VALUES (?1, ?2, 'operator', 'Stopped from dashboard')",
+        params![stop_id, id],
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let status_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO status_updates (id, agent_id, state, message) VALUES (?1, ?2, 'stopping', 'Stop requested by operator from dashboard')",
+        params![status_id, id],
+    ).ok();
+    conn.execute(
+        "UPDATE agents SET current_state = 'stopping', last_message = 'Stop requested by operator from dashboard', last_update_at = datetime('now') WHERE id = ?1",
+        params![id],
+    ).ok();
+
+    Ok(Html(r#"<div class="msg-success">Stop signal sent. Agent will stop on its next status check.</div>"#.to_string()).into_response())
+}
+
+/// POST /agents/:id/cancel-stop — cancel stop from UI (HTMX)
+pub async fn cancel_stop_html(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<String>,
+) -> Result<Response, StatusCode> {
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let affected = conn.execute(
+        "UPDATE stop_requests SET status = 'cancelled', resolved_at = datetime('now') WHERE agent_id = ?1 AND status = 'pending'",
+        params![id],
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if affected == 0 {
+        return Ok(Html(r#"<div class="msg-error">No pending stop request found.</div>"#.to_string()).into_response());
+    }
+
+    let prev_state: String = conn
+        .query_row(
+            "SELECT state FROM status_updates WHERE agent_id = ?1 AND state != 'stopping' ORDER BY created_at DESC LIMIT 1",
+            params![id], |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "running".to_string());
+
+    let status_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO status_updates (id, agent_id, state, message) VALUES (?1, ?2, ?3, 'Stop request cancelled by operator')",
+        params![status_id, id, prev_state],
+    ).ok();
+    conn.execute(
+        "UPDATE agents SET current_state = ?1, last_message = 'Stop request cancelled', last_update_at = datetime('now') WHERE id = ?2",
+        params![prev_state, id],
+    ).ok();
+
+    Ok(Html(format!(
+        r#"<div class="msg-success">Stop cancelled. Agent reverted to <strong>{}</strong>.</div>"#,
+        prev_state
+    )).into_response())
+}
+
 // ─── Login / Logout ───
 
 /// GET /login

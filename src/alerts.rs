@@ -201,6 +201,53 @@ pub async fn silent_agent_checker(db: DbPool) {
     loop {
         interval.tick().await;
 
+        // Check for expired stop requests
+        {
+            let timeout_secs: i64 = std::env::var("STOP_TIMEOUT_SECONDS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(300);
+
+            let conn = db.get().unwrap();
+            let mut stmt = conn
+                .prepare(
+                    "SELECT sr.id, sr.agent_id, a.name FROM stop_requests sr
+                     JOIN agents a ON sr.agent_id = a.id
+                     WHERE sr.status = 'pending'
+                     AND sr.created_at < datetime('now', ?1)",
+                )
+                .unwrap();
+
+            let timeout_modifier = format!("-{} seconds", timeout_secs);
+            let expired: Vec<(String, String, String)> = stmt
+                .query_map(params![timeout_modifier], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect();
+
+            for (stop_id, agent_id, agent_name) in &expired {
+                conn.execute(
+                    "UPDATE stop_requests SET status = 'expired', resolved_at = datetime('now') WHERE id = ?1",
+                    params![stop_id],
+                ).ok();
+
+                let status_id = uuid::Uuid::new_v4().to_string();
+                conn.execute(
+                    "INSERT INTO status_updates (id, agent_id, state, message) VALUES (?1, ?2, 'stopped', ?3)",
+                    params![status_id, agent_id, "Stop request expired — agent did not acknowledge within timeout"],
+                ).ok();
+
+                conn.execute(
+                    "UPDATE agents SET current_state = 'stopped', last_message = 'Stop request expired', last_update_at = datetime('now') WHERE id = ?1",
+                    params![agent_id],
+                ).ok();
+
+                tracing::warn!("Stop request expired for agent '{}' ({})", agent_name, agent_id);
+            }
+        }
+
         let rules_and_agents = {
             let conn = db.get().unwrap();
 

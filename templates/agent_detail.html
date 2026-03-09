@@ -94,6 +94,31 @@
         </form>
         <div id="set-status-result" style="margin-top: 8px;"></div>
       </div>
+
+      <div id="stop-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        {% if agent.status == "starting" || agent.status == "running" || agent.status == "warning" || agent.status == "paused" %}
+        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--status-error-fg);">Stop Agent</h3>
+        <form hx-post="/agents/{{ agent.id }}/stop"
+              hx-target="#stop-result"
+              hx-swap="innerHTML"
+              hx-confirm="Are you sure you want to stop this agent?"
+              hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1500);">
+          <button type="submit" class="btn btn-danger" style="width: 100%;">Stop Agent</button>
+        </form>
+        {% else if agent.status == "stopping" %}
+        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--status-warning-fg);">Stopping...</h3>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Waiting for agent to acknowledge stop signal.</p>
+        <form hx-post="/agents/{{ agent.id }}/cancel-stop"
+              hx-target="#stop-result"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1500);">
+          <button type="submit" class="btn" style="width: 100%;">Cancel Stop</button>
+        </form>
+        {% else if agent.status == "stopped" %}
+        <p style="font-size: 12px; color: var(--text-secondary);"><span class="badge badge-stopped">stopped</span></p>
+        {% endif %}
+        <div id="stop-result" style="margin-top: 8px;"></div>
+      </div>
     </div>
   </div>
 </div>

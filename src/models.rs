@@ -232,7 +232,7 @@ pub struct ActivityEntry {
 // ─── Valid states ───
 
 pub const VALID_STATES: &[&str] = &[
-    "starting", "running", "warning", "error", "completed", "offline", "paused", "errored",
+    "starting", "running", "warning", "error", "completed", "offline", "paused", "errored", "stopping", "stopped",
 ];
 
 pub fn is_valid_state(state: &str) -> bool {
@@ -241,6 +241,10 @@ pub fn is_valid_state(state: &str) -> bool {
 
 pub fn is_error_state(state: &str) -> bool {
     matches!(state, "error" | "errored")
+}
+
+pub fn is_stoppable_state(state: &str) -> bool {
+    matches!(state, "starting" | "running" | "warning" | "paused")
 }
 
 // ─── Helpers ───
