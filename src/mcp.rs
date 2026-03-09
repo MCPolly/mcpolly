@@ -1,8 +1,4 @@
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, Json};
 use rusqlite::params;
 use uuid::Uuid;
 
@@ -25,9 +21,15 @@ pub async fn register_agent(
 
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
-    let metadata_json = req.metadata.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
+    let metadata_json = req
+        .metadata
+        .as_ref()
+        .map(|m| serde_json::to_string(m).unwrap_or_default());
 
     // Check if agent already exists by name
     let existing: Option<String> = conn
@@ -101,13 +103,19 @@ pub async fn post_status(
     }
 
     let message = req.message.clone().unwrap_or_default();
-    let metadata_json = req.metadata.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
+    let metadata_json = req
+        .metadata
+        .as_ref()
+        .map(|m| serde_json::to_string(m).unwrap_or_default());
 
     let agent_name: Option<String>;
     {
         let conn = db.get().map_err(|e| {
             tracing::error!("Pool error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database pool error"})),
+            )
         })?;
 
         // Verify agent exists
@@ -158,7 +166,11 @@ pub async fn post_status(
         })?;
 
         agent_name = conn
-            .query_row("SELECT name FROM agents WHERE id = ?1", params![req.agent_id], |row| row.get(0))
+            .query_row(
+                "SELECT name FROM agents WHERE id = ?1",
+                params![req.agent_id],
+                |row| row.get(0),
+            )
             .ok();
     }
 
@@ -195,7 +207,10 @@ pub async fn post_error(
     {
         let conn = db.get().map_err(|e| {
             tracing::error!("Pool error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database pool error"})),
+            )
         })?;
 
         // Verify agent exists
@@ -237,7 +252,11 @@ pub async fn post_error(
         })?;
 
         agent_name = conn
-            .query_row("SELECT name FROM agents WHERE id = ?1", params![req.agent_id], |row| row.get(0))
+            .query_row(
+                "SELECT name FROM agents WHERE id = ?1",
+                params![req.agent_id],
+                |row| row.get(0),
+            )
             .ok();
     }
 

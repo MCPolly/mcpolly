@@ -72,6 +72,7 @@ pub struct RegisterAgentResponse {
 // ─── Status Update ───
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct StatusUpdate {
     pub id: String,
     pub agent_id: String,
@@ -130,6 +131,7 @@ pub struct AlertRule {
 
 /// View model used by alert templates.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AlertView {
     pub id: String,
     pub condition: String,
@@ -232,7 +234,16 @@ pub struct ActivityEntry {
 // ─── Valid states ───
 
 pub const VALID_STATES: &[&str] = &[
-    "starting", "running", "warning", "error", "completed", "offline", "paused", "errored", "stopping", "stopped",
+    "starting",
+    "running",
+    "warning",
+    "error",
+    "completed",
+    "offline",
+    "paused",
+    "errored",
+    "stopping",
+    "stopped",
 ];
 
 pub fn is_valid_state(state: &str) -> bool {

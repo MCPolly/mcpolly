@@ -53,6 +53,7 @@ pub struct ActivityFragmentTemplate {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AlertHistoryView {
     pub agent_id: String,
     pub agent_name: String,
@@ -67,6 +68,7 @@ pub struct AlertHistoryView {
 pub struct AlertsTemplate {
     pub active_nav: String,
     pub alerts: Vec<AlertView>,
+    #[allow(dead_code)]
     pub agents: Vec<AgentView>,
     pub alert_history: Vec<AlertHistoryView>,
 }
@@ -208,7 +210,12 @@ fn agent_row_to_view(conn: &rusqlite::Connection, row: &AgentRow) -> AgentView {
     row.to_view(total_updates, total_errors)
 }
 
-fn query_activity(conn: &rusqlite::Connection, agent_id: &str, limit: i64, offset: i64) -> Vec<ActivityEntry> {
+fn query_activity(
+    conn: &rusqlite::Connection,
+    agent_id: &str,
+    limit: i64,
+    offset: i64,
+) -> Vec<ActivityEntry> {
     let mut stmt = conn
         .prepare(
             "SELECT * FROM (
@@ -244,17 +251,21 @@ fn query_activity(conn: &rusqlite::Connection, agent_id: &str, limit: i64, offse
 // ─── Route handlers ───
 
 /// GET / — dashboard
-pub async fn dashboard(
-    Extension(db): Extension<DbPool>,
-) -> Result<Response, StatusCode> {
+pub async fn dashboard(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let rows = query_agent_rows(&conn);
     let agents: Vec<AgentView> = rows.iter().map(|r| agent_row_to_view(&conn, r)).collect();
 
     let total_count = agents.len();
     let running_count = agents.iter().filter(|a| a.status == "running").count();
-    let errored_count = agents.iter().filter(|a| a.status == "errored" || a.status == "error").count();
-    let offline_count = agents.iter().filter(|a| a.status == "offline" || a.status == "completed").count();
+    let errored_count = agents
+        .iter()
+        .filter(|a| a.status == "errored" || a.status == "error")
+        .count();
+    let offline_count = agents
+        .iter()
+        .filter(|a| a.status == "offline" || a.status == "completed")
+        .count();
 
     let template = DashboardTemplate {
         active_nav: "agents".to_string(),
@@ -274,11 +285,14 @@ pub async fn agents_partial(
 ) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let rows = query_agent_rows(&conn);
-    let agents: Vec<AgentView> = rows.iter()
+    let agents: Vec<AgentView> = rows
+        .iter()
         .map(|r| agent_row_to_view(&conn, r))
         .filter(|a| {
             if let Some(ref status) = params.status {
-                if status.is_empty() { return true; }
+                if status.is_empty() {
+                    return true;
+                }
                 a.status == *status
             } else {
                 true
@@ -312,16 +326,20 @@ pub async fn agents_partial(
 }
 
 /// GET /partials/summary — HTMX partial for summary cards
-pub async fn summary_partial(
-    Extension(db): Extension<DbPool>,
-) -> Result<Response, StatusCode> {
+pub async fn summary_partial(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let rows = query_agent_rows(&conn);
 
     let total = rows.len();
     let running = rows.iter().filter(|r| r.current_state == "running").count();
-    let errored = rows.iter().filter(|r| r.current_state == "errored" || r.current_state == "error").count();
-    let offline = rows.iter().filter(|r| r.current_state == "offline" || r.current_state == "completed").count();
+    let errored = rows
+        .iter()
+        .filter(|r| r.current_state == "errored" || r.current_state == "error")
+        .count();
+    let offline = rows
+        .iter()
+        .filter(|r| r.current_state == "offline" || r.current_state == "completed")
+        .count();
 
     let html = format!(
         r#"<div class="summary-card">
@@ -415,9 +433,7 @@ pub async fn agent_activity_fragment(
 }
 
 /// GET /alerts — alerts page
-pub async fn alerts_page(
-    Extension(db): Extension<DbPool>,
-) -> Result<Response, StatusCode> {
+pub async fn alerts_page(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rules_stmt = conn
@@ -461,7 +477,8 @@ pub async fn alerts_page(
                 rule_condition: row.get(2)?,
                 message: row.get(3)?,
                 status: row.get(4)?,
-                sent_at: row.get::<_, String>(5)
+                sent_at: row
+                    .get::<_, String>(5)
                     .map(|ts| crate::models::relative_time(&ts))
                     .unwrap_or_else(|_| "unknown".to_string()),
             })
@@ -480,9 +497,7 @@ pub async fn alerts_page(
 }
 
 /// GET /alerts/new-form — HTMX partial for new alert form
-pub async fn alerts_new_form(
-    Extension(db): Extension<DbPool>,
-) -> Result<Response, StatusCode> {
+pub async fn alerts_new_form(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let rows = query_agent_rows(&conn);
     let agents: Vec<AgentView> = rows.iter().map(|r| agent_row_to_view(&conn, r)).collect();
@@ -544,9 +559,7 @@ pub async fn delete_alert_html(
 }
 
 /// GET /settings — settings page
-pub async fn settings_page(
-    Extension(db): Extension<DbPool>,
-) -> Result<Response, StatusCode> {
+pub async fn settings_page(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
     let keys = query_api_keys(&db);
 
     let template = SettingsTemplate {
@@ -643,7 +656,11 @@ pub async fn revoke_key_html(
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let active_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM api_keys WHERE revoked = 0", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM api_keys WHERE revoked = 0",
+            [],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
 
     if active_count <= 1 {
@@ -686,7 +703,8 @@ pub async fn errors_page(
                 agent_name: row.get(1)?,
                 severity: row.get(2)?,
                 message: row.get(3)?,
-                timestamp: row.get::<_, String>(4)
+                timestamp: row
+                    .get::<_, String>(4)
                     .map(|ts| crate::models::relative_time(&ts))
                     .unwrap_or_else(|_| "unknown".to_string()),
             })
@@ -717,9 +735,7 @@ pub struct EmbeddingsSearchParams {
 }
 
 /// GET /embeddings — embeddings page with sources list
-pub async fn embeddings_page(
-    Extension(db): Extension<DbPool>,
-) -> Result<Response, StatusCode> {
+pub async fn embeddings_page(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut stmt = conn
@@ -735,7 +751,8 @@ pub async fn embeddings_page(
                 source_type: row.get(0)?,
                 source_name: row.get(1)?,
                 chunk_count: row.get(2)?,
-                last_updated: row.get::<_, String>(3)
+                last_updated: row
+                    .get::<_, String>(3)
                     .map(|ts| crate::models::relative_time(&ts))
                     .unwrap_or_else(|_| "unknown".to_string()),
             })
@@ -767,13 +784,8 @@ pub async fn embeddings_search(
 
     let source_type_filter = params.source_type.filter(|s| !s.is_empty());
 
-    let search_results = crate::embeddings::search(
-        &db,
-        &query,
-        source_type_filter.as_deref(),
-        10,
-    )
-    .await;
+    let search_results =
+        crate::embeddings::search(&db, &query, source_type_filter.as_deref(), 10).await;
 
     let results = match search_results {
         Ok(sr) => sr
@@ -819,24 +831,25 @@ fn text_search_fallback(
                  LIMIT 20",
             )
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let rows: Vec<SearchResultView> = stmt.query_map(params![st, query], |row| {
-            let content: String = row.get(3)?;
-            let truncated = if content.len() > 200 {
-                format!("{}...", &content[..200])
-            } else {
-                content
-            };
-            Ok(SearchResultView {
-                source_name: row.get(0)?,
-                source_type: row.get(1)?,
-                heading: row.get(2)?,
-                content: truncated,
-                distance: "text match".to_string(),
+        let rows: Vec<SearchResultView> = stmt
+            .query_map(params![st, query], |row| {
+                let content: String = row.get(3)?;
+                let truncated = if content.len() > 200 {
+                    format!("{}...", &content[..200])
+                } else {
+                    content
+                };
+                Ok(SearchResultView {
+                    source_name: row.get(0)?,
+                    source_type: row.get(1)?,
+                    heading: row.get(2)?,
+                    content: truncated,
+                    distance: "text match".to_string(),
+                })
             })
-        })
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .filter_map(|r| r.ok())
-        .collect();
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     } else {
         let mut stmt = conn
@@ -846,24 +859,25 @@ fn text_search_fallback(
                  LIMIT 20",
             )
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let rows: Vec<SearchResultView> = stmt.query_map(params![query], |row| {
-            let content: String = row.get(3)?;
-            let truncated = if content.len() > 200 {
-                format!("{}...", &content[..200])
-            } else {
-                content
-            };
-            Ok(SearchResultView {
-                source_name: row.get(0)?,
-                source_type: row.get(1)?,
-                heading: row.get(2)?,
-                content: truncated,
-                distance: "text match".to_string(),
+        let rows: Vec<SearchResultView> = stmt
+            .query_map(params![query], |row| {
+                let content: String = row.get(3)?;
+                let truncated = if content.len() > 200 {
+                    format!("{}...", &content[..200])
+                } else {
+                    content
+                };
+                Ok(SearchResultView {
+                    source_name: row.get(0)?,
+                    source_type: row.get(1)?,
+                    heading: row.get(2)?,
+                    content: truncated,
+                    distance: "text match".to_string(),
+                })
             })
-        })
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .filter_map(|r| r.ok())
-        .collect();
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     };
 
@@ -890,12 +904,18 @@ pub async fn delete_embedding_source_html(
     };
 
     for doc_id in &doc_ids {
-        conn.execute("DELETE FROM vec_embeddings WHERE document_id = ?1", params![doc_id])
-            .ok();
+        conn.execute(
+            "DELETE FROM vec_embeddings WHERE document_id = ?1",
+            params![doc_id],
+        )
+        .ok();
     }
 
-    conn.execute("DELETE FROM embedding_documents WHERE source_name = ?1", params![name])
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    conn.execute(
+        "DELETE FROM embedding_documents WHERE source_name = ?1",
+        params![name],
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Html(String::new()).into_response())
 }
@@ -912,7 +932,9 @@ pub async fn set_agent_status_html(
     axum::extract::Form(form): axum::extract::Form<SetStatusFormData>,
 ) -> Result<Response, StatusCode> {
     if !crate::models::is_valid_state(&form.state) {
-        return Ok(Html(r#"<div class="msg-error">Invalid status.</div>"#.to_string()).into_response());
+        return Ok(
+            Html(r#"<div class="msg-error">Invalid status.</div>"#.to_string()).into_response(),
+        );
     }
 
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -927,7 +949,9 @@ pub async fn set_agent_status_html(
         .unwrap_or(false);
 
     if !agent_exists {
-        return Ok(Html(r#"<div class="msg-error">Agent not found.</div>"#.to_string()).into_response());
+        return Ok(
+            Html(r#"<div class="msg-error">Agent not found.</div>"#.to_string()).into_response(),
+        );
     }
 
     let status_message = format!("Status manually set to {}", form.state);
@@ -940,7 +964,10 @@ pub async fn set_agent_status_html(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let update_error = if crate::models::is_error_state(&form.state) {
-        format!(", last_error_message = '{}'", status_message.replace('\'', "''"))
+        format!(
+            ", last_error_message = '{}'",
+            status_message.replace('\'', "''")
+        )
     } else {
         String::new()
     };
@@ -957,7 +984,8 @@ pub async fn set_agent_status_html(
     Ok(Html(format!(
         r#"<div class="msg-success">Agent status set to <strong>{}</strong>.</div>"#,
         form.state
-    )).into_response())
+    ))
+    .into_response())
 }
 
 /// POST /agents/:id/stop — stop agent from UI (HTMX)
@@ -968,21 +996,33 @@ pub async fn stop_agent_html(
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let current_state: String = conn
-        .query_row("SELECT current_state FROM agents WHERE id = ?1", params![id], |row| row.get(0))
+        .query_row(
+            "SELECT current_state FROM agents WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
     if !crate::models::is_stoppable_state(&current_state) {
         return Ok(Html(format!(
             r#"<div class="msg-error">Agent is in '{}' state and cannot be stopped.</div>"#,
             current_state
-        )).into_response());
+        ))
+        .into_response());
     }
 
     let pending: i64 = conn
-        .query_row("SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'", params![id], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'",
+            params![id],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
     if pending > 0 {
-        return Ok(Html(r#"<div class="msg-error">Agent already has a pending stop request.</div>"#.to_string()).into_response());
+        return Ok(Html(
+            r#"<div class="msg-error">Agent already has a pending stop request.</div>"#.to_string(),
+        )
+        .into_response());
     }
 
     let stop_id = uuid::Uuid::new_v4().to_string();
@@ -1017,7 +1057,10 @@ pub async fn cancel_stop_html(
     ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if affected == 0 {
-        return Ok(Html(r#"<div class="msg-error">No pending stop request found.</div>"#.to_string()).into_response());
+        return Ok(Html(
+            r#"<div class="msg-error">No pending stop request found.</div>"#.to_string(),
+        )
+        .into_response());
     }
 
     let prev_state: String = conn
@@ -1040,7 +1083,8 @@ pub async fn cancel_stop_html(
     Ok(Html(format!(
         r#"<div class="msg-success">Stop cancelled. Agent reverted to <strong>{}</strong>.</div>"#,
         prev_state
-    )).into_response())
+    ))
+    .into_response())
 }
 
 // ─── Login / Logout ───

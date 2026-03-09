@@ -1,8 +1,7 @@
 use rmcp::{
-    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router,
+    schemars, tool, tool_handler, tool_router, ServerHandler,
 };
 use rusqlite::params;
 use serde_json::json;
@@ -27,7 +26,9 @@ struct RegisterAgentParams {
 struct PostStatusParams {
     #[schemars(description = "Agent ID returned from register_agent")]
     agent_id: String,
-    #[schemars(description = "One of: starting, running, warning, error, completed, offline, paused, errored")]
+    #[schemars(
+        description = "One of: starting, running, warning, error, completed, offline, paused, errored"
+    )]
     state: String,
     #[schemars(description = "Human-readable message describing what the agent is doing")]
     message: String,
@@ -112,11 +113,10 @@ impl McPollyHandler {
 
 #[tool_router]
 impl McPollyHandler {
-    #[tool(description = "Register an AI agent with MCPolly. Returns the agent ID needed for subsequent calls. Idempotent on name.")]
-    async fn register_agent(
-        &self,
-        Parameters(params): Parameters<RegisterAgentParams>,
-    ) -> String {
+    #[tool(
+        description = "Register an AI agent with MCPolly. Returns the agent ID needed for subsequent calls. Idempotent on name."
+    )]
+    async fn register_agent(&self, Parameters(params): Parameters<RegisterAgentParams>) -> String {
         if params.name.trim().is_empty() {
             return json!({"error": "Agent name is required"}).to_string();
         }
@@ -149,7 +149,9 @@ impl McPollyHandler {
         }
     }
 
-    #[tool(description = "Post a status update for an agent. Valid states: starting, running, warning, error, completed, offline, paused, errored")]
+    #[tool(
+        description = "Post a status update for an agent. Valid states: starting, running, warning, error, completed, offline, paused, errored"
+    )]
     async fn post_status(&self, Parameters(params): Parameters<PostStatusParams>) -> String {
         if !is_valid_state(&params.state) {
             return json!({"error": format!("Invalid state '{}'. Valid: {:?}", params.state, VALID_STATES)}).to_string();
@@ -243,7 +245,9 @@ impl McPollyHandler {
         json!({"status": "ok", "stop_requested": stop_requested}).to_string()
     }
 
-    #[tool(description = "Report an error from an agent. Records the error and triggers configured alerts.")]
+    #[tool(
+        description = "Report an error from an agent. Records the error and triggers configured alerts."
+    )]
     async fn post_error(&self, Parameters(params): Parameters<PostErrorParams>) -> String {
         if params.message.trim().is_empty() {
             return json!({"error": "Error message is required"}).to_string();
@@ -331,11 +335,10 @@ impl McPollyHandler {
         serde_json::to_string(&agents).unwrap_or_else(|_| "[]".to_string())
     }
 
-    #[tool(description = "Get the recent activity timeline for a specific agent including status updates and errors")]
-    async fn get_agent_activity(
-        &self,
-        Parameters(params): Parameters<AgentIdParam>,
-    ) -> String {
+    #[tool(
+        description = "Get the recent activity timeline for a specific agent including status updates and errors"
+    )]
+    async fn get_agent_activity(&self, Parameters(params): Parameters<AgentIdParam>) -> String {
         let conn = self.db.get().unwrap();
         let mut stmt = match conn.prepare(
             "SELECT * FROM (
@@ -366,7 +369,9 @@ impl McPollyHandler {
         serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string())
     }
 
-    #[tool(description = "Index a PRD document for semantic search. Chunks the markdown and generates vector embeddings.")]
+    #[tool(
+        description = "Index a PRD document for semantic search. Chunks the markdown and generates vector embeddings."
+    )]
     async fn update_prd_embeddings(
         &self,
         Parameters(params): Parameters<UpdateEmbeddingsParams>,
@@ -379,25 +384,24 @@ impl McPollyHandler {
         }
     }
 
-    #[tool(description = "Index a design document for semantic search. Chunks the markdown and generates vector embeddings.")]
+    #[tool(
+        description = "Index a design document for semantic search. Chunks the markdown and generates vector embeddings."
+    )]
     async fn update_design_embeddings(
         &self,
         Parameters(params): Parameters<UpdateEmbeddingsParams>,
     ) -> String {
-        match embeddings::index_document(
-            &self.db,
-            "design",
-            &params.document_name,
-            &params.content,
-        )
-        .await
+        match embeddings::index_document(&self.db, "design", &params.document_name, &params.content)
+            .await
         {
             Ok(n) => json!({"chunks_indexed": n}).to_string(),
             Err(e) => json!({"error": e}).to_string(),
         }
     }
 
-    #[tool(description = "Search indexed documents using natural language. Returns the most relevant chunks by semantic similarity.")]
+    #[tool(
+        description = "Search indexed documents using natural language. Returns the most relevant chunks by semantic similarity."
+    )]
     async fn search_embeddings(
         &self,
         Parameters(params): Parameters<SearchEmbeddingsParams>,
@@ -416,7 +420,9 @@ impl McPollyHandler {
         }
     }
 
-    #[tool(description = "List all indexed embedding sources with chunk counts and last update times.")]
+    #[tool(
+        description = "List all indexed embedding sources with chunk counts and last update times."
+    )]
     async fn list_embedding_sources(&self) -> String {
         let conn = self.db.get().unwrap();
         let mut stmt = match conn.prepare(
@@ -451,12 +457,11 @@ impl McPollyHandler {
         let conn = self.db.get().unwrap();
 
         let doc_ids: Vec<String> = {
-            let mut stmt = match conn
-                .prepare("SELECT id FROM embedding_documents WHERE source_name = ?1")
-            {
-                Ok(s) => s,
-                Err(e) => return json!({"error": format!("Database error: {e}")}).to_string(),
-            };
+            let mut stmt =
+                match conn.prepare("SELECT id FROM embedding_documents WHERE source_name = ?1") {
+                    Ok(s) => s,
+                    Err(e) => return json!({"error": format!("Database error: {e}")}).to_string(),
+                };
             stmt.query_map(params![params.source_name], |row| row.get(0))
                 .map(|rows| rows.filter_map(|r| r.ok()).collect())
                 .unwrap_or_default()
@@ -477,7 +482,9 @@ impl McPollyHandler {
         json!({"deleted": true}).to_string()
     }
 
-    #[tool(description = "Spawn a product manager agent. Registers the agent, searches for relevant PRD context, and returns agent_id with context chunks.")]
+    #[tool(
+        description = "Spawn a product manager agent. Registers the agent, searches for relevant PRD context, and returns agent_id with context chunks."
+    )]
     async fn spawn_product_manager(
         &self,
         Parameters(params): Parameters<SpawnAgentParams>,
@@ -487,10 +494,10 @@ impl McPollyHandler {
 
         let agent_id = register_or_get_agent(&self.db, &agent_name, &params.task);
 
-        let context = match embeddings::search(&self.db, &params.task, None, 5).await {
-            Ok(results) => results,
-            Err(_) => Vec::new(),
-        };
+        let context: Vec<embeddings::SearchResult> =
+            embeddings::search(&self.db, &params.task, None, 5)
+                .await
+                .unwrap_or_default();
 
         let conn = self.db.get().unwrap();
         let status_id = Uuid::new_v4().to_string();
@@ -511,7 +518,9 @@ impl McPollyHandler {
         .to_string()
     }
 
-    #[tool(description = "Spawn a product designer agent. Registers the agent, searches for relevant PRD and design context, and returns agent_id with context chunks.")]
+    #[tool(
+        description = "Spawn a product designer agent. Registers the agent, searches for relevant PRD and design context, and returns agent_id with context chunks."
+    )]
     async fn spawn_product_designer(
         &self,
         Parameters(params): Parameters<SpawnAgentParams>,
@@ -550,15 +559,18 @@ impl McPollyHandler {
         .to_string()
     }
 
-    #[tool(description = "Request an agent to stop. Sets the agent to 'stopping' state and creates a stop request that the agent will detect on its next status check.")]
-    async fn stop_agent(
-        &self,
-        Parameters(params): Parameters<StopAgentParams>,
-    ) -> String {
+    #[tool(
+        description = "Request an agent to stop. Sets the agent to 'stopping' state and creates a stop request that the agent will detect on its next status check."
+    )]
+    async fn stop_agent(&self, Parameters(params): Parameters<StopAgentParams>) -> String {
         let conn = self.db.get().unwrap();
 
         let current_state: Option<String> = conn
-            .query_row("SELECT current_state FROM agents WHERE id = ?1", params![params.agent_id], |row| row.get(0))
+            .query_row(
+                "SELECT current_state FROM agents WHERE id = ?1",
+                params![params.agent_id],
+                |row| row.get(0),
+            )
             .ok();
 
         let state = match current_state {
@@ -571,14 +583,20 @@ impl McPollyHandler {
         }
 
         let pending: i64 = conn
-            .query_row("SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'", params![params.agent_id], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'",
+                params![params.agent_id],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
         if pending > 0 {
             return json!({"error": "Agent already has a pending stop request"}).to_string();
         }
 
         let stop_id = Uuid::new_v4().to_string();
-        let reason = params.reason.unwrap_or_else(|| "Stop requested via MCP".to_string());
+        let reason = params
+            .reason
+            .unwrap_or_else(|| "Stop requested via MCP".to_string());
 
         conn.execute(
             "INSERT INTO stop_requests (id, agent_id, requested_by, reason) VALUES (?1, ?2, 'mcp', ?3)",
@@ -599,11 +617,10 @@ impl McPollyHandler {
         json!({"stop_request_id": stop_id, "status": "pending"}).to_string()
     }
 
-    #[tool(description = "Check if a stop signal has been requested for an agent. Returns stop_requested: true if a pending stop exists.")]
-    async fn check_stop_signal(
-        &self,
-        Parameters(params): Parameters<CheckStopParams>,
-    ) -> String {
+    #[tool(
+        description = "Check if a stop signal has been requested for an agent. Returns stop_requested: true if a pending stop exists."
+    )]
+    async fn check_stop_signal(&self, Parameters(params): Parameters<CheckStopParams>) -> String {
         let conn = self.db.get().unwrap();
 
         let result = conn.query_row(
@@ -614,11 +631,10 @@ impl McPollyHandler {
 
         match result {
             Ok((reason, requested_at)) => {
-                json!({"stop_requested": true, "reason": reason, "requested_at": requested_at}).to_string()
+                json!({"stop_requested": true, "reason": reason, "requested_at": requested_at})
+                    .to_string()
             }
-            Err(_) => {
-                json!({"stop_requested": false}).to_string()
-            }
+            Err(_) => json!({"stop_requested": false}).to_string(),
         }
     }
 }

@@ -4,8 +4,8 @@ use axum::{
     Extension, Router,
 };
 use rmcp::transport::{
-    StreamableHttpServerConfig,
     streamable_http_server::{session::local::LocalSessionManager, tower::StreamableHttpService},
+    StreamableHttpServerConfig,
 };
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -30,8 +30,7 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let database_url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "mcpolly.db".to_string());
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "mcpolly.db".to_string());
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
@@ -57,7 +56,12 @@ async fn main() {
         .route("/agents/:id/activity", get(api::get_agent_activity))
         .route("/agents/:id/errors", get(api::get_agent_errors))
         .route("/agents/:id/status", put(api::set_agent_status))
-        .route("/agents/:id/stop", post(api::stop_agent).delete(api::cancel_stop_agent).get(api::get_stop_status))
+        .route(
+            "/agents/:id/stop",
+            post(api::stop_agent)
+                .delete(api::cancel_stop_agent)
+                .get(api::get_stop_status),
+        )
         .route("/status", post(mcp::post_status))
         .route("/errors", post(mcp::post_error))
         .route("/alerts", get(api::list_alerts).post(api::create_alert))
@@ -83,7 +87,10 @@ async fn main() {
             "/agents/:id/activity",
             get(templates::agent_activity_fragment),
         )
-        .route("/agents/:id/set-status", post(templates::set_agent_status_html))
+        .route(
+            "/agents/:id/set-status",
+            post(templates::set_agent_status_html),
+        )
         .route("/agents/:id/stop", post(templates::stop_agent_html))
         .route("/agents/:id/cancel-stop", post(templates::cancel_stop_html))
         .route(

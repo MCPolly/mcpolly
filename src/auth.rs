@@ -4,7 +4,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use crate::db::DbPool;
 
@@ -20,10 +20,10 @@ pub fn generate_raw_key() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-    format!("mcp_{}", base64::Engine::encode(
-        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-        &bytes,
-    ))
+    format!(
+        "mcp_{}",
+        base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, &bytes,)
+    )
 }
 
 /// Validate an API key against the database. Returns true if valid.
@@ -83,10 +83,7 @@ fn extract_api_key(req: &Request) -> Option<String> {
 }
 
 /// Axum middleware that requires a valid API key (returns 401 for API routes).
-pub async fn require_api_key(
-    req: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn require_api_key(req: Request, next: Next) -> Result<Response, StatusCode> {
     let db = req.extensions().get::<DbPool>().cloned();
 
     let db = match db {
@@ -111,10 +108,7 @@ pub async fn require_api_key(
 }
 
 /// Axum middleware for UI routes — redirects to /login if not authenticated.
-pub async fn require_auth_or_redirect(
-    req: Request,
-    next: Next,
-) -> Result<Response, Response> {
+pub async fn require_auth_or_redirect(req: Request, next: Next) -> Result<Response, Response> {
     let db = req.extensions().get::<DbPool>().cloned();
 
     let db = match db {

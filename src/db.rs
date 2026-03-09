@@ -1,5 +1,5 @@
 use r2d2::{ManageConnection, Pool};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 pub type DbPool = Pool<SqliteConnectionManager>;
 
@@ -38,8 +38,15 @@ impl ManageConnection for SqliteConnectionManager {
 
 pub fn init_db(database_url: &str) -> DbPool {
     unsafe {
-        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
+        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
+            *const (),
+            unsafe extern "C" fn(
+                *mut rusqlite::ffi::sqlite3,
+                *mut *const i8,
+                *const rusqlite::ffi::sqlite3_api_routines,
+            ) -> i32,
+        >(
+            sqlite_vec::sqlite3_vec_init as *const ()
         )));
     }
 
@@ -165,7 +172,8 @@ fn run_migrations(conn: &Connection) {
             embedding float[384]
         )",
         [],
-    ).expect("Failed to create vec_embeddings virtual table");
+    )
+    .expect("Failed to create vec_embeddings virtual table");
 
     tracing::info!("Database migrations completed successfully");
 }
@@ -173,7 +181,11 @@ fn run_migrations(conn: &Connection) {
 /// Seed a default API key if no keys exist. Returns the raw key if one was created.
 pub fn seed_default_key_if_empty(conn: &Connection) -> Option<String> {
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM api_keys WHERE revoked = 0", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM api_keys WHERE revoked = 0",
+            [],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
 
     if count == 0 {
@@ -185,7 +197,8 @@ pub fn seed_default_key_if_empty(conn: &Connection) -> Option<String> {
         conn.execute(
             "INSERT INTO api_keys (id, label, key_hash, key_prefix) VALUES (?1, ?2, ?3, ?4)",
             params![id, "default", key_hash, key_prefix],
-        ).unwrap();
+        )
+        .unwrap();
 
         tracing::info!("No API keys found. Created default key.");
         tracing::info!("=== DEFAULT API KEY (save this, it won't be shown again) ===");

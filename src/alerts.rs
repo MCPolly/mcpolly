@@ -244,7 +244,11 @@ pub async fn silent_agent_checker(db: DbPool) {
                     params![agent_id],
                 ).ok();
 
-                tracing::warn!("Stop request expired for agent '{}' ({})", agent_name, agent_id);
+                tracing::warn!(
+                    "Stop request expired for agent '{}' ({})",
+                    agent_name,
+                    agent_id
+                );
             }
         }
 

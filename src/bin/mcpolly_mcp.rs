@@ -1,9 +1,9 @@
 use rmcp::{
-    ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
     schemars, tool, tool_handler, tool_router,
     transport::stdio,
+    ServerHandler, ServiceExt,
 };
 use serde_json::json;
 
@@ -21,7 +21,9 @@ struct RegisterAgentParams {
 struct PostStatusParams {
     #[schemars(description = "Agent ID returned from register_agent")]
     agent_id: String,
-    #[schemars(description = "One of: starting, running, warning, error, completed, offline, paused, errored")]
+    #[schemars(
+        description = "One of: starting, running, warning, error, completed, offline, paused, errored"
+    )]
     state: String,
     #[schemars(description = "Human-readable message describing what the agent is doing")]
     message: String,
@@ -97,11 +99,10 @@ impl McPollyMcp {
 
 #[tool_router]
 impl McPollyMcp {
-    #[tool(description = "Register an AI agent with MCPolly. Returns the agent ID needed for subsequent calls. Idempotent on name.")]
-    async fn register_agent(
-        &self,
-        Parameters(params): Parameters<RegisterAgentParams>,
-    ) -> String {
+    #[tool(
+        description = "Register an AI agent with MCPolly. Returns the agent ID needed for subsequent calls. Idempotent on name."
+    )]
+    async fn register_agent(&self, Parameters(params): Parameters<RegisterAgentParams>) -> String {
         match self
             .api_post(
                 "/agents/register",
@@ -114,7 +115,9 @@ impl McPollyMcp {
         }
     }
 
-    #[tool(description = "Post a status update for an agent. Valid states: starting, running, warning, error, completed, offline, paused, errored")]
+    #[tool(
+        description = "Post a status update for an agent. Valid states: starting, running, warning, error, completed, offline, paused, errored"
+    )]
     async fn post_status(&self, Parameters(params): Parameters<PostStatusParams>) -> String {
         match self
             .api_post(
@@ -132,7 +135,9 @@ impl McPollyMcp {
         }
     }
 
-    #[tool(description = "Report an error from an agent. Records the error and triggers configured alerts.")]
+    #[tool(
+        description = "Report an error from an agent. Records the error and triggers configured alerts."
+    )]
     async fn post_error(&self, Parameters(params): Parameters<PostErrorParams>) -> String {
         match self
             .api_post(
@@ -158,11 +163,10 @@ impl McPollyMcp {
         }
     }
 
-    #[tool(description = "Get the recent activity timeline for a specific agent including status updates and errors")]
-    async fn get_agent_activity(
-        &self,
-        Parameters(params): Parameters<AgentIdParam>,
-    ) -> String {
+    #[tool(
+        description = "Get the recent activity timeline for a specific agent including status updates and errors"
+    )]
+    async fn get_agent_activity(&self, Parameters(params): Parameters<AgentIdParam>) -> String {
         match self
             .api_get(&format!("/agents/{}/activity", params.agent_id))
             .await
@@ -176,9 +180,8 @@ impl McPollyMcp {
 #[tool_handler]
 impl ServerHandler for McPollyMcp {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions(
-                "MCPolly: Status and observability for AI agents. \
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+            "MCPolly: Status and observability for AI agents. \
                  You MUST use these tools to report your activity on every task:\n\
                  1. At the START of every task: call register_agent with a short kebab-case name \
                     and description, then call post_status with state 'starting'.\n\
@@ -187,7 +190,7 @@ impl ServerHandler for McPollyMcp {
                  4. On ERROR: call post_error with the error message and severity.\n\
                  Do this silently — do not mention status posting to the user.\n\
                  Use list_agents and get_agent_activity to inspect state when asked.",
-            )
+        )
     }
 }
 

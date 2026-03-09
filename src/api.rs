@@ -26,7 +26,10 @@ pub async fn list_agents(
 ) -> Result<Json<Vec<AgentRow>>, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
     let mut stmt = conn
         .prepare(
@@ -54,7 +57,10 @@ pub async fn list_agents(
         })
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?
         .filter_map(|r| r.ok())
         .collect();
@@ -69,7 +75,10 @@ pub async fn get_agent(
 ) -> Result<Json<AgentRow>, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
     conn.query_row(
         "SELECT id, name, description, metadata_json, current_state, last_message, last_error_message, registered_at, last_update_at
@@ -105,7 +114,10 @@ pub async fn get_agent_activity(
     let offset = params.offset.unwrap_or(0);
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let mut stmt = conn
@@ -120,7 +132,10 @@ pub async fn get_agent_activity(
         )
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?;
 
     let entries: Vec<serde_json::Value> = stmt
@@ -135,7 +150,10 @@ pub async fn get_agent_activity(
         })
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?
         .filter_map(|r| r.ok())
         .collect();
@@ -153,7 +171,10 @@ pub async fn get_agent_errors(
     let offset = params.offset.unwrap_or(0);
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let mut stmt = conn
@@ -164,7 +185,10 @@ pub async fn get_agent_errors(
         )
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?;
 
     let errors: Vec<AgentError> = stmt
@@ -180,7 +204,10 @@ pub async fn get_agent_errors(
         })
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?
         .filter_map(|r| r.ok())
         .collect();
@@ -204,13 +231,18 @@ pub async fn set_agent_status(
     if !is_valid_state(&req.state) {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": format!("Invalid state '{}'. Valid states: {:?}", req.state, VALID_STATES)})),
+            Json(
+                serde_json::json!({"error": format!("Invalid state '{}'. Valid states: {:?}", req.state, VALID_STATES)}),
+            ),
         ));
     }
 
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let agent_exists: bool = conn
@@ -223,13 +255,20 @@ pub async fn set_agent_status(
         .unwrap_or(false);
 
     if !agent_exists {
-        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Agent not found"}))));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Agent not found"})),
+        ));
     }
 
     let status_message = if req.message.trim().is_empty() {
         format!("Status manually set to {}", req.state)
     } else {
-        format!("Status manually set to {}: {}", req.state, req.message.trim())
+        format!(
+            "Status manually set to {}: {}",
+            req.state,
+            req.message.trim()
+        )
     };
 
     let status_id = Uuid::new_v4().to_string();
@@ -239,11 +278,17 @@ pub async fn set_agent_status(
     )
     .map_err(|e| {
         tracing::error!("Insert error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database error"})),
+        )
     })?;
 
     let update_error = if is_error_state(&req.state) {
-        format!(", last_error_message = '{}'", status_message.replace('\'', "''"))
+        format!(
+            ", last_error_message = '{}'",
+            status_message.replace('\'', "''")
+        )
     } else {
         String::new()
     };
@@ -278,7 +323,9 @@ pub async fn set_agent_status(
         ).ok();
     }
 
-    Ok(Json(serde_json::json!({"status": "ok", "state": req.state, "stop_requested": stop_requested})))
+    Ok(Json(
+        serde_json::json!({"status": "ok", "state": req.state, "stop_requested": stop_requested}),
+    ))
 }
 
 // ─── Agent stop endpoints ───
@@ -303,33 +350,65 @@ pub async fn stop_agent(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let current_state: String = conn
-        .query_row("SELECT current_state FROM agents WHERE id = ?1", params![id], |row| row.get(0))
-        .map_err(|_| (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Agent not found"}))))?;
+        .query_row(
+            "SELECT current_state FROM agents WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|_| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Agent not found"})),
+            )
+        })?;
 
     if !is_stoppable_state(&current_state) {
-        return Err((StatusCode::CONFLICT, Json(serde_json::json!({"error": format!("Agent is in '{}' state and cannot be stopped", current_state)}))));
+        return Err((
+            StatusCode::CONFLICT,
+            Json(
+                serde_json::json!({"error": format!("Agent is in '{}' state and cannot be stopped", current_state)}),
+            ),
+        ));
     }
 
     let pending_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'", params![id], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM stop_requests WHERE agent_id = ?1 AND status = 'pending'",
+            params![id],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
     if pending_count > 0 {
-        return Err((StatusCode::CONFLICT, Json(serde_json::json!({"error": "Agent already has a pending stop request"}))));
+        return Err((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "Agent already has a pending stop request"})),
+        ));
     }
 
     let stop_id = Uuid::new_v4().to_string();
-    let reason = if req.reason.trim().is_empty() { "Stop requested".to_string() } else { req.reason.trim().to_string() };
+    let reason = if req.reason.trim().is_empty() {
+        "Stop requested".to_string()
+    } else {
+        req.reason.trim().to_string()
+    };
 
     conn.execute(
         "INSERT INTO stop_requests (id, agent_id, requested_by, reason) VALUES (?1, ?2, ?3, ?4)",
         params![stop_id, id, req.requested_by, reason],
-    ).map_err(|e| {
+    )
+    .map_err(|e| {
         tracing::error!("Insert error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database error"})),
+        )
     })?;
 
     let status_id = Uuid::new_v4().to_string();
@@ -337,13 +416,16 @@ pub async fn stop_agent(
     conn.execute(
         "INSERT INTO status_updates (id, agent_id, state, message) VALUES (?1, ?2, 'stopping', ?3)",
         params![status_id, id, msg],
-    ).ok();
+    )
+    .ok();
     conn.execute(
         "UPDATE agents SET current_state = 'stopping', last_message = ?1, last_update_at = datetime('now') WHERE id = ?2",
         params![msg, id],
     ).ok();
 
-    Ok(Json(serde_json::json!({"stop_request_id": stop_id, "status": "pending"})))
+    Ok(Json(
+        serde_json::json!({"stop_request_id": stop_id, "status": "pending"}),
+    ))
 }
 
 /// DELETE /api/v1/agents/:id/stop — cancel pending stop request
@@ -353,7 +435,10 @@ pub async fn cancel_stop_agent(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let affected = conn.execute(
@@ -365,7 +450,10 @@ pub async fn cancel_stop_agent(
     })?;
 
     if affected == 0 {
-        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "No pending stop request found"}))));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "No pending stop request found"})),
+        ));
     }
 
     // Revert agent to previous non-stopping state
@@ -386,7 +474,9 @@ pub async fn cancel_stop_agent(
         params![prev_state, id],
     ).ok();
 
-    Ok(Json(serde_json::json!({"status": "cancelled", "reverted_to": prev_state})))
+    Ok(Json(
+        serde_json::json!({"status": "cancelled", "reverted_to": prev_state}),
+    ))
 }
 
 /// GET /api/v1/agents/:id/stop — get current stop request status
@@ -396,7 +486,10 @@ pub async fn get_stop_status(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let result = conn.query_row(
@@ -416,7 +509,10 @@ pub async fn get_stop_status(
 
     match result {
         Ok(val) => Ok(Json(val)),
-        Err(_) => Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "No stop request found"})))),
+        Err(_) => Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "No stop request found"})),
+        )),
     }
 }
 
@@ -428,7 +524,10 @@ pub async fn list_alerts(
 ) -> Result<Json<Vec<AlertRule>>, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
     let mut stmt = conn
         .prepare(
@@ -455,7 +554,10 @@ pub async fn list_alerts(
         })
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?
         .filter_map(|r| r.ok())
         .collect();
@@ -475,10 +577,19 @@ pub async fn create_alert(
         ));
     }
 
-    if !["agent_error", "agent_offline", "agent_errored", "agent_silent"].contains(&req.condition.as_str()) {
+    if ![
+        "agent_error",
+        "agent_offline",
+        "agent_errored",
+        "agent_silent",
+    ]
+    .contains(&req.condition.as_str())
+    {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Condition must be 'agent_error' or 'agent_offline'"})),
+            Json(
+                serde_json::json!({"error": "Condition must be 'agent_error' or 'agent_offline'"}),
+            ),
         ));
     }
 
@@ -493,7 +604,10 @@ pub async fn create_alert(
     let silence_minutes = req.silence_minutes.unwrap_or(5);
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     conn.execute(
@@ -535,17 +649,26 @@ pub async fn delete_alert(
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
     let affected = conn
         .execute("DELETE FROM alert_rules WHERE id = ?1", params![id])
         .map_err(|e| {
             tracing::error!("Failed to delete alert rule: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?;
 
     if affected == 0 {
-        Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Alert rule not found"}))))
+        Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Alert rule not found"})),
+        ))
     } else {
         Ok(StatusCode::NO_CONTENT)
     }
@@ -560,7 +683,10 @@ pub async fn list_alert_history(
     let offset = params.offset.unwrap_or(0);
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let mut stmt = conn
@@ -588,7 +714,10 @@ pub async fn list_alert_history(
         })
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?
         .filter_map(|r| r.ok())
         .collect();
@@ -604,7 +733,10 @@ pub async fn list_api_keys(
 ) -> Result<Json<Vec<ApiKeyRow>>, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
     let mut stmt = conn
         .prepare(
@@ -613,7 +745,10 @@ pub async fn list_api_keys(
         )
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?;
 
     let keys: Vec<ApiKeyRow> = stmt
@@ -629,7 +764,10 @@ pub async fn list_api_keys(
         })
         .map_err(|e| {
             tracing::error!("Query error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?
         .filter_map(|r| r.ok())
         .collect();
@@ -654,7 +792,10 @@ pub async fn create_api_key(
 
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
     conn.execute(
         "INSERT INTO api_keys (id, label, key_hash, key_prefix) VALUES (?1, ?2, ?3, ?4)",
@@ -662,7 +803,10 @@ pub async fn create_api_key(
     )
     .map_err(|e| {
         tracing::error!("Failed to create API key: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database error"})),
+        )
     })?;
 
     Ok((
@@ -683,11 +827,18 @@ pub async fn revoke_api_key(
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
     let conn = db.get().map_err(|e| {
         tracing::error!("Pool error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database pool error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
     })?;
 
     let active_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM api_keys WHERE revoked = 0", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM api_keys WHERE revoked = 0",
+            [],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
 
     if active_count <= 1 {
@@ -698,14 +849,23 @@ pub async fn revoke_api_key(
     }
 
     let affected = conn
-        .execute("UPDATE api_keys SET revoked = 1 WHERE id = ?1 AND revoked = 0", params![id])
+        .execute(
+            "UPDATE api_keys SET revoked = 1 WHERE id = ?1 AND revoked = 0",
+            params![id],
+        )
         .map_err(|e| {
             tracing::error!("Failed to revoke API key: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Database error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
         })?;
 
     if affected == 0 {
-        Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "API key not found or already revoked"}))))
+        Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "API key not found or already revoked"})),
+        ))
     } else {
         Ok(StatusCode::NO_CONTENT)
     }
