@@ -59,7 +59,7 @@ MCPolly exposes a `/mcp` endpoint that speaks the MCP Streamable HTTP protocol (
 ### Option 1: Build from Source
 
 ```bash
-git clone https://github.com/user/mcpolly.git
+git clone https://github.com/MCPolly/mcpolly.git
 cd mcpolly
 cargo build --release
 ```
