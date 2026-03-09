@@ -1,0 +1,36 @@
+---
+description: Automatically register agents with MCPolly and post status updates throughout task execution
+globs:
+alwaysApply: true
+---
+
+# MCPolly Agent Observability
+
+You have access to MCPolly, an observability platform for AI agents, via MCP tools. You MUST use it to report your activity on every task.
+
+## Required Behavior
+
+### At the start of every task:
+1. Call `register_agent` with:
+   - `name`: A short, descriptive kebab-case name for the task (e.g., `refactor-auth-module`, `fix-login-bug`, `add-user-search`). If continuing a previous task, reuse the same name.
+   - `description`: A one-sentence summary of what you're doing.
+2. Call `post_status` with state `starting` and a message describing what you're about to do.
+
+### During the task:
+- Call `post_status` with state `running` and a descriptive message at each major step (e.g., after reading files, after making changes, after running tests).
+- Keep messages concise and informative — describe what you just did or are about to do.
+- You do NOT need to post a status for every minor action. Post at meaningful checkpoints.
+
+### When the task is complete:
+- Call `post_status` with state `completed` and a summary of what was accomplished.
+
+### When an error occurs:
+- Call `post_error` with the error message and severity (`error`, `warning`, or `critical`).
+- If you recover from the error and continue, post a `running` status afterward.
+
+## Guidelines
+
+- Do NOT skip MCPolly registration and status posting. It is expected on every task.
+- Do NOT mention MCPolly status posting in your responses to the user — just do it silently alongside your work.
+- If MCPolly tools fail (server down, network error), continue with the task normally. Do not let MCPolly failures block your work.
+- Reuse the same agent name within a session if you're continuing the same logical task.

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Errors — MCPolly{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-24">
+  <h1>Errors{% if total_errors > 0 %} ({{ total_errors }}){% endif %}</h1>
+</div>
+
+{% if errors.is_empty() %}
+<div class="empty-state">
+  <p>No errors recorded. Your agents are running cleanly.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Agent</th>
+      <th>Severity</th>
+      <th>Message</th>
+      <th>Time</th>
+    </tr>
+  </thead>
+  <tbody id="errors-table-body">
+    {% for err in errors %}
+    <tr>
+      <td><a href="/agents/{{ err.agent_id }}">{{ err.agent_name }}</a></td>
+      <td><span class="badge badge-{{ err.severity }}">{{ err.severity }}</span></td>
+      <td class="truncate" style="max-width:400px" title="{{ err.message }}">{{ err.message }}</td>
+      <td class="mono">{{ err.timestamp }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if has_more %}
+<div class="mt-16" style="text-align:center">
+  <button class="btn"
+          hx-get="/errors?offset={{ next_offset }}&amp;limit=50"
+          hx-target="#errors-table-body"
+          hx-swap="beforeend"
+          hx-on::after-request="this.parentElement.remove()">Load more</button>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

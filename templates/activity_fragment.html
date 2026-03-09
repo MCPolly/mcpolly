@@ -1,0 +1,32 @@
+{% for entry in entries %}
+<div class="activity-entry" data-type="{% if entry.entry_type == "error" %}error{% else if entry.state.is_some() %}{{ entry.state.as_deref().unwrap_or("status") }}{% else %}status{% endif %}">
+  <div class="activity-meta">
+    <span class="activity-timestamp" title="{{ entry.timestamp }}">{{ entry.timestamp }}</span>
+    {% if entry.entry_type == "error" %}
+    <span class="badge badge-error">error</span>
+    {% else if entry.entry_type == "status" %}
+    <span class="badge badge-status">status</span>
+    {% else if entry.entry_type == "warn" %}
+    <span class="badge badge-warn">warning</span>
+    {% else %}
+    <span class="badge badge-info">{{ entry.entry_type }}</span>
+    {% endif %}
+    {% if entry.state.is_some() %}
+    <span class="badge badge-{{ entry.state.as_deref().unwrap_or("") }}">{{ entry.state.as_deref().unwrap_or("") }}</span>
+    {% endif %}
+  </div>
+  <div class="activity-message expandable" onclick="this.classList.toggle('expanded')">{{ entry.message }}</div>
+</div>
+{% endfor %}
+
+{% if has_more %}
+<div class="mt-16" style="text-align: center;">
+  <button class="btn"
+          hx-get="/agents/{{ agent_id }}/activity?offset={{ next_offset }}&amp;limit=50"
+          hx-target="closest div"
+          hx-swap="outerHTML">
+    Load more
+    <span class="htmx-indicator">Loading...</span>
+  </button>
+</div>
+{% endif %}

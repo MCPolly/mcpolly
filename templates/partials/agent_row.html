@@ -1,0 +1,13 @@
+<tr>
+  <td><a href="/agents/{{ agent.id }}">{{ agent.name }}</a></td>
+  <td><span class="badge badge-{{ agent.status }}">{{ agent.status }}</span></td>
+  <td class="mono">{{ agent.last_seen }}</td>
+  <td>
+    {% if agent.last_error.is_some() %}
+    <span class="truncate" style="display: inline-block;" title="{{ agent.last_error.as_deref().unwrap_or("") }}">{{ agent.last_error.as_deref().unwrap_or("") }}</span>
+    {% else %}
+    <span class="text-muted">&mdash;</span>
+    {% endif %}
+  </td>
+  <td><a href="/agents/{{ agent.id }}" class="btn btn-sm">View</a></td>
+</tr>

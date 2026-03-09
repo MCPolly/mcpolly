@@ -1,0 +1,20 @@
+<div style="border: 1px solid #e5e7eb; padding: 16px; margin-bottom: 16px;">
+  <h2 class="mb-16">Generate New API Key</h2>
+  <form hx-post="/settings/keys"
+        hx-target="#key-form-container"
+        hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) location.reload()">
+    <div class="form-inline">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="label">Label</label>
+        <input type="text" name="label" id="label" placeholder="e.g. prod-agents" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-bottom: 0;">Generate</button>
+      <button type="button" class="btn"
+              hx-get="/settings/keys/cancel-form"
+              hx-target="#key-form-container"
+              hx-swap="innerHTML"
+              style="margin-bottom: 0;">Cancel</button>
+    </div>
+  </form>
+</div>

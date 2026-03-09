@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts — MCPolly{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-24">
+  <h1>Alerts{% if alerts.len() > 0 %} ({{ alerts.len() }}){% endif %}</h1>
+  <button class="btn btn-primary"
+          hx-get="/alerts/new-form"
+          hx-target="#alert-form-container"
+          hx-swap="innerHTML">+ New Alert</button>
+</div>
+
+<div id="alert-form-container" class="mb-24"></div>
+
+{% if alerts.is_empty() %}
+<div class="empty-state">
+  <p>No alert rules configured. Create one to get notified when agents encounter problems.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Condition</th>
+      <th>Scope</th>
+      <th>Channel</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="alerts-table-body">
+    {% for alert in alerts %}
+    {% include "partials/alert_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<section class="mt-24">
+  <h2 class="mb-16">Notification History</h2>
+  {% if alert_history.is_empty() %}
+  <div class="empty-state">
+    <p>No alert notifications sent yet.</p>
+  </div>
+  {% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>Agent</th>
+        <th>Condition</th>
+        <th>Message</th>
+        <th>Status</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in alert_history %}
+      <tr>
+        <td>{{ h.agent_name }}</td>
+        <td class="mono">{{ h.rule_condition }}</td>
+        <td class="truncate" style="max-width:300px" title="{{ h.message }}">{{ h.message }}</td>
+        <td><span class="badge badge-{% if h.status == "sent" %}active{% else if h.status == "failed" %}error{% else %}warning{% endif %}">{{ h.status }}</span></td>
+        <td class="mono">{{ h.sent_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% block inline_form %}{% endblock %}
+{% endblock %}

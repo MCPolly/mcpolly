@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Agents — MCPolly{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-24">
+  <h1>Agents{% if agents.len() > 0 %} ({{ agents.len() }}){% endif %}</h1>
+</div>
+
+<div class="summary-cards mb-24" id="summary-cards"
+     hx-get="/partials/summary"
+     hx-trigger="every 10s"
+     hx-swap="innerHTML">
+  <div class="summary-card">
+    <div class="summary-card-value">{{ total_count }}</div>
+    <div class="summary-card-label">Total Agents</div>
+  </div>
+  <div class="summary-card summary-card-running">
+    <div class="summary-card-value">{{ running_count }}</div>
+    <div class="summary-card-label">Running</div>
+  </div>
+  <div class="summary-card summary-card-errored">
+    <div class="summary-card-value">{{ errored_count }}</div>
+    <div class="summary-card-label">Errored</div>
+  </div>
+  <div class="summary-card summary-card-offline">
+    <div class="summary-card-value">{{ offline_count }}</div>
+    <div class="summary-card-label">Offline</div>
+  </div>
+</div>
+
+<div class="filter-pills mb-16">
+  <button class="filter-pill active" onclick="filterAgents(this, '')">All</button>
+  <button class="filter-pill" onclick="filterAgents(this, 'running')">Running</button>
+  <button class="filter-pill" onclick="filterAgents(this, 'errored')">Errored</button>
+  <button class="filter-pill" onclick="filterAgents(this, 'starting')">Starting</button>
+  <button class="filter-pill" onclick="filterAgents(this, 'completed')">Completed</button>
+  <button class="filter-pill" onclick="filterAgents(this, 'offline')">Offline</button>
+</div>
+
+{% if agents.is_empty() %}
+<div class="empty-state">
+  <p>No agents registered yet. Configure an agent with your API key to get started.</p>
+  <p class="mt-8"><a href="/settings">Go to Settings</a> to generate an API key.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Status</th>
+      <th>Last Update</th>
+      <th>Last Error</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="agent-table-body"
+         hx-get="/partials/agents"
+         hx-trigger="every 10s"
+         hx-swap="innerHTML">
+    {% for agent in agents %}
+    {% include "partials/agent_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<script>
+function filterAgents(el, status) {
+  document.querySelectorAll('.filter-pill').forEach(function(p){ p.classList.remove('active'); });
+  el.classList.add('active');
+  var url = '/partials/agents' + (status ? '?status=' + status : '');
+  htmx.ajax('GET', url, {target: '#agent-table-body', swap: 'innerHTML'});
+}
+</script>
+{% endblock %}

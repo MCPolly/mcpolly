@@ -1,0 +1,39 @@
+<div style="border: 1px solid #e5e7eb; padding: 16px; margin-bottom: 16px;">
+  <h2 class="mb-16">New Alert Rule</h2>
+  <form hx-post="/alerts"
+        hx-target="#alert-form-container"
+        hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) location.reload()">
+    <div class="form-group">
+      <label for="condition">Condition</label>
+      <select name="condition" id="condition" required>
+        <option value="">Select a condition</option>
+        <option value="agent_error">Agent Error</option>
+        <option value="agent_offline">Agent Offline</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="agent_id">Agent (optional — leave blank for all agents)</label>
+      <select name="agent_id" id="agent_id">
+        <option value="">All agents</option>
+        {% for agent in agents %}
+        <option value="{{ agent.id }}">{{ agent.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="webhook_url">Discord Webhook URL</label>
+      <input type="url" name="webhook_url" id="webhook_url" placeholder="https://discord.com/api/webhooks/..." required>
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn"
+              hx-get="/alerts/cancel-form"
+              hx-target="#alert-form-container"
+              hx-swap="innerHTML">Cancel</button>
+    </div>
+  </form>
+</div>

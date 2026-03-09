@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Embeddings — MCPolly{% endblock %}
+
+{% block content %}
+<h1 class="mb-24">Embeddings</h1>
+
+<h2 class="mb-16">Indexed Sources</h2>
+
+{% if sources.is_empty() %}
+<div class="empty-state mb-24">
+  <p>No embedding sources indexed yet. Use the API to index documents.</p>
+</div>
+{% else %}
+<table class="mb-24">
+  <thead>
+    <tr>
+      <th>Source Name</th>
+      <th>Type</th>
+      <th>Chunks</th>
+      <th>Last Updated</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for source in sources %}
+    <tr id="source-{{ loop.index }}">
+      <td>{{ source.source_name }}</td>
+      <td><span class="badge badge-info">{{ source.source_type }}</span></td>
+      <td><span class="badge badge-offline">{{ source.chunk_count }}</span></td>
+      <td class="mono">{{ source.last_updated }}</td>
+      <td>
+        <button class="btn btn-danger btn-sm"
+                hx-delete="/embeddings/sources/{{ source.source_name }}"
+                hx-target="#source-{{ loop.index }}"
+                hx-swap="outerHTML"
+                hx-confirm="Delete all embeddings for '{{ source.source_name }}'?">Delete</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2 class="mb-16">Semantic Search</h2>
+
+<form class="form-inline mb-16"
+      hx-get="/embeddings/search"
+      hx-target="#search-results"
+      hx-swap="innerHTML"
+      hx-indicator="#search-indicator">
+  <div class="form-group" style="flex:1;margin-bottom:0">
+    <input type="text" name="q" placeholder="Search embedded knowledge..." required
+           style="max-width:100%;width:100%">
+  </div>
+  <div class="form-group" style="margin-bottom:0">
+    <select name="source_type">
+      <option value="">All Types</option>
+      <option value="prd">PRD</option>
+      <option value="design">Design</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Search</button>
+  <span id="search-indicator" class="htmx-indicator">Searching...</span>
+</form>
+
+<div id="search-results"></div>
+{% endblock %}

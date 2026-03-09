@@ -1,0 +1,62 @@
+# Build artifacts
+/target/
+
+# Database files (contain live agent data, API keys, embeddings)
+*.db
+*.db-shm
+*.db-wal
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# ──────────────────────────────────────────────
+# Internal / non-open-source documents
+# ──────────────────────────────────────────────
+
+# Business strategy (competitive intelligence, pricing, financials)
+BIZ_ADVISOR.md
+
+# Internal agent instruction docs (development process, not product)
+ORCHESTRATOR.md
+PRODUCT_AGENT.md
+PRODUCT_DESIGN_AGENT.md
+BACKEND_AGENT.md
+FRONTEND_AGENT.md
+
+# Internal design and PRD working documents
+# (README.md and IDEA.md cover what users need publicly)
+PRD.md
+PRD_VECTOR_EMBEDDINGS.md
+PRD_UI_ENHANCEMENTS.md
+DESIGN_SPEC.md
+DESIGN_UI_ENHANCEMENTS.md
+
+# Claude Code commands (internal development tooling)
+.claude/
+
+# ──────────────────────────────────────────────
+# Files that SHOULD be committed (not ignored)
+# ──────────────────────────────────────────────
+# README.md          — public-facing docs
+# CLAUDE.md          — project context for AI agents (useful for contributors)
+# LOCAL_DEV.md       — developer setup guide
+# IDEA.md            — product concept (inspiration, not competitive intel)
+# VISION.md          — public product vision
+# Cargo.toml         — dependency manifest
+# Cargo.lock         — reproducible builds
+# src/               — all source code
+# templates/         — all HTML templates
+# .cursor/rules/     — mcpolly.mdc (the auto-integration feature)

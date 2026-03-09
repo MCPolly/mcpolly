@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ agent.name }} — MCPolly{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/">Agents</a><span class="sep">/</span>{{ agent.name }}
+</div>
+
+<div class="flex-between mb-24">
+  <div>
+    <span class="status-dot status-dot-{{ agent.status }}"></span>
+    <h1 style="display: inline;">{{ agent.name }}</h1>
+    <span class="badge badge-{{ agent.status }}" style="margin-left: 8px;">{{ agent.status }}</span>
+  </div>
+</div>
+
+{% if agent.description.is_some() %}
+<p class="text-muted mb-24">{{ agent.description.as_deref().unwrap_or("") }}</p>
+{% endif %}
+
+<div class="two-col">
+  <div class="two-col-main">
+    <h2>Activity</h2>
+
+    <div id="activity-feed"
+         hx-get="/agents/{{ agent.id }}/activity?offset=0&amp;limit=50"
+         hx-trigger="every 10s"
+         hx-swap="innerHTML">
+      {% if activities.is_empty() %}
+      <div class="empty-state">
+        <p>No activity recorded yet. This agent has not sent any status updates.</p>
+      </div>
+      {% else %}
+      {% for entry in activities %}
+      {% include "partials/activity_entry.html" %}
+      {% endfor %}
+
+      {% if has_more %}
+      <div class="mt-16" style="text-align: center;">
+        <button class="btn"
+                hx-get="/agents/{{ agent.id }}/activity?offset={{ next_offset }}&amp;limit=50"
+                hx-target="#activity-feed"
+                hx-swap="beforeend"
+                hx-on::after-request="this.parentElement.remove()">
+          Load more
+          <span class="htmx-indicator">Loading...</span>
+        </button>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="two-col-sidebar">
+    <div class="sidebar-card">
+      <h2>Agent Info</h2>
+      <dl>
+        <dt>Status</dt>
+        <dd><span class="badge badge-{{ agent.status }}">{{ agent.status }}</span></dd>
+
+        <dt>Agent ID</dt>
+        <dd class="mono">{{ agent.id }}</dd>
+
+        <dt>Registered</dt>
+        <dd>{{ agent.registered_at }}</dd>
+
+        <dt>Last Update</dt>
+        <dd>{{ agent.last_seen }}</dd>
+
+        <dt>Total Updates</dt>
+        <dd>{{ agent.total_updates }}</dd>
+
+        <dt>Total Errors</dt>
+        <dd>{{ agent.total_errors }}</dd>
+      </dl>
+
+      <div class="set-status-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Set Status</h3>
+        <form hx-post="/agents/{{ agent.id }}/set-status"
+              hx-target="#set-status-result"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1000);"
+              style="display: flex; gap: 6px; align-items: flex-end;">
+          <select name="state" style="flex: 1; padding: 5px 8px; font-size: 13px; font-family: inherit; border: 1px solid var(--border-strong); border-radius: 2px; background: var(--bg-primary); color: var(--text-primary);">
+            <option value="completed" {% if agent.status == "completed" %}selected{% endif %}>Completed</option>
+            <option value="offline" {% if agent.status == "offline" %}selected{% endif %}>Offline</option>
+            <option value="running" {% if agent.status == "running" %}selected{% endif %}>Running</option>
+            <option value="paused" {% if agent.status == "paused" %}selected{% endif %}>Paused</option>
+            <option value="errored" {% if agent.status == "errored" %}selected{% endif %}>Errored</option>
+            <option value="warning" {% if agent.status == "warning" %}selected{% endif %}>Warning</option>
+          </select>
+          <button type="submit" class="btn btn-sm btn-primary">Set</button>
+        </form>
+        <div id="set-status-result" style="margin-top: 8px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

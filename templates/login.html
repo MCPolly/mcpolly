@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — MCPolly</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1a1a1a;
+      background: #ffffff;
+      line-height: 1.5;
+      font-size: 14px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .login-box {
+      width: 100%;
+      max-width: 360px;
+      padding: 32px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .login-box h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .login-box p {
+      color: #6b7280;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+
+    .login-box label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #374151;
+    }
+
+    .login-box input[type="password"] {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: inherit;
+      border: 1px solid #d1d5db;
+      border-radius: 2px;
+      background: #ffffff;
+      margin-bottom: 16px;
+    }
+
+    .login-box input:focus {
+      outline: none;
+      border-color: #1f2937;
+    }
+
+    .login-box button {
+      width: 100%;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      border: 1px solid #1f2937;
+      background: #1f2937;
+      color: #ffffff;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+
+    .login-box button:hover {
+      background: #374151;
+    }
+
+    .msg-error {
+      padding: 10px 14px;
+      border: 1px solid #dc2626;
+      color: #dc2626;
+      background: #fef2f2;
+      margin-bottom: 16px;
+      font-size: 13px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h1>MCPolly</h1>
+    <p>Enter your API key to continue.</p>
+
+    {% if error.is_some() %}
+    <div class="msg-error">{{ error.as_deref().unwrap_or("") }}</div>
+    {% endif %}
+
+    <form method="POST" action="/login">
+      <label for="api_key">API Key</label>
+      <input type="password" name="api_key" id="api_key" placeholder="mcp_..." required autofocus>
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+</body>
+</html>

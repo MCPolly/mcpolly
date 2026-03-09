@@ -1,0 +1,33 @@
+<tr id="alert-row-{{ alert.id }}">
+  <td>
+    {% if alert.condition == "agent_error" %}
+    Agent Error
+    {% else if alert.condition == "agent_offline" %}
+    Agent Offline
+    {% else %}
+    {{ alert.condition }}
+    {% endif %}
+  </td>
+  <td>
+    {% if alert.agent_name.is_some() %}
+    {{ alert.agent_name.as_deref().unwrap_or("") }}
+    {% else %}
+    All agents
+    {% endif %}
+  </td>
+  <td>Discord</td>
+  <td>
+    {% if alert.active %}
+    <span class="badge badge-active">active</span>
+    {% else %}
+    <span class="badge badge-offline">paused</span>
+    {% endif %}
+  </td>
+  <td>
+    <button class="btn btn-danger btn-sm"
+            hx-delete="/alerts/{{ alert.id }}"
+            hx-target="#alert-row-{{ alert.id }}"
+            hx-swap="outerHTML swap:0s"
+            hx-confirm="Delete this alert rule?">Delete</button>
+  </td>
+</tr>

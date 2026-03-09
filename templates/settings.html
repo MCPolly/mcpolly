@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — MCPolly{% endblock %}
+
+{% block content %}
+<h1 class="mb-24">Settings</h1>
+
+<section>
+  <div class="flex-between mb-16">
+    <h2>API Keys</h2>
+    <button class="btn btn-primary"
+            hx-get="/settings/keys/new-form"
+            hx-target="#key-form-container"
+            hx-swap="innerHTML">+ New Key</button>
+  </div>
+
+  <div id="key-form-container" class="mb-16"></div>
+
+  {% if new_key.is_some() %}
+  <div class="key-display">
+    <div>Your new API key:</div>
+    <code>{{ new_key.as_deref().unwrap_or("") }}</code>
+    <p>Copy this key now. It will not be shown again.</p>
+  </div>
+  {% endif %}
+
+  {% if keys.is_empty() %}
+  <div class="empty-state">
+    <p>No API keys created yet. Generate a key to allow agents to connect.</p>
+  </div>
+  {% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>Label</th>
+        <th>Key</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="keys-table-body">
+      {% for key in keys %}
+      <tr id="key-row-{{ key.id }}">
+        <td>{{ key.label }}</td>
+        <td class="mono">sk-...{{ key.key_suffix }}</td>
+        <td>{{ key.created_at }}</td>
+        <td>
+          <button class="btn btn-danger btn-sm"
+                  hx-delete="/settings/keys/{{ key.id }}"
+                  hx-target="#key-row-{{ key.id }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Are you sure you want to revoke this API key? This cannot be undone.">Revoke</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}
