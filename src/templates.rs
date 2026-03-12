@@ -534,7 +534,9 @@ pub async fn alerts_page(Extension(db): Extension<DbPool>) -> Result<Response, S
                 condition: row.get(1)?,
                 agent_name: row.get(7)?,
                 webhook_url: row.get(3)?,
-                channel_type: row.get::<_, String>(4).unwrap_or_else(|_| "discord".to_string()),
+                channel_type: row
+                    .get::<_, String>(4)
+                    .unwrap_or_else(|_| "discord".to_string()),
                 active: row.get::<_, i64>(5)? != 0,
                 created_at: row.get(6)?,
             })
@@ -647,8 +649,11 @@ pub async fn delete_alert_html(
     Path(id): Path<String>,
 ) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    conn.execute("DELETE FROM alert_history WHERE alert_rule_id = ?1", params![id])
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    conn.execute(
+        "DELETE FROM alert_history WHERE alert_rule_id = ?1",
+        params![id],
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     conn.execute("DELETE FROM alert_rules WHERE id = ?1", params![id])
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -1202,8 +1207,8 @@ pub async fn setup_page(
             .unwrap_or(0);
 
         let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
-        let host = std::env::var("MCPOLLY_HOST")
-            .unwrap_or_else(|_| format!("http://localhost:{}", port));
+        let host =
+            std::env::var("MCPOLLY_HOST").unwrap_or_else(|_| format!("http://localhost:{}", port));
 
         let cursor_config = format!(
             "{{\n  \"mcpServers\": {{\n    \"mcpolly\": {{\n      \"url\": \"{}/mcp\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {}\"\n      }}\n    }}\n  }}\n}}",
@@ -1247,8 +1252,8 @@ pub async fn setup_page(
     }
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
-    let host = std::env::var("MCPOLLY_HOST")
-        .unwrap_or_else(|_| format!("http://localhost:{}", port));
+    let host =
+        std::env::var("MCPOLLY_HOST").unwrap_or_else(|_| format!("http://localhost:{}", port));
 
     let cursor_config = format!(
         "{{\n  \"mcpServers\": {{\n    \"mcpolly\": {{\n      \"url\": \"{}/mcp\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {}\"\n      }}\n    }}\n  }}\n}}",
@@ -1430,8 +1435,7 @@ pub async fn agent_tab(
             let limit: i64 = 50;
             let activities = query_activity(&conn, &id, limit + 1, 0);
             let has_more = activities.len() as i64 > limit;
-            let entries: Vec<ActivityEntry> =
-                activities.into_iter().take(limit as usize).collect();
+            let entries: Vec<ActivityEntry> = activities.into_iter().take(limit as usize).collect();
 
             let template = ActivityFragmentTemplate {
                 entries,
@@ -1608,7 +1612,9 @@ fn text_search_fallback_knowledge(
         )
     };
 
-    let mut stmt = conn.prepare(sql).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let map_row = |row: &rusqlite::Row| -> rusqlite::Result<KnowledgeSearchResultView> {
         let content: String = row.get(3)?;
@@ -1667,12 +1673,7 @@ pub async fn unified_search(
 
         let agents: Vec<(String, String, String, Option<String>)> = stmt
             .query_map(params![query], |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                ))
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .filter_map(|r| r.ok())
@@ -1704,12 +1705,7 @@ pub async fn unified_search(
 
         let errors: Vec<(String, String, String, String)> = stmt
             .query_map(params![query], |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                ))
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .filter_map(|r| r.ok())

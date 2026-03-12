@@ -45,8 +45,7 @@ fn format_uptime(duration: std::time::Duration) -> String {
 }
 
 fn get_db_size() -> String {
-    let db_path =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "mcpolly.db".to_string());
+    let db_path = std::env::var("DATABASE_URL").unwrap_or_else(|_| "mcpolly.db".to_string());
     match std::fs::metadata(&db_path) {
         Ok(meta) => {
             let bytes = meta.len();
@@ -63,8 +62,7 @@ fn get_db_size() -> String {
 }
 
 async fn check_ollama_connected() -> bool {
-    let url = std::env::var("OLLAMA_URL")
-        .unwrap_or_else(|_| "http://localhost:11434".to_string());
+    let url = std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string());
     reqwest::Client::new()
         .get(format!("{}/api/version", url))
         .timeout(std::time::Duration::from_secs(2))
@@ -86,8 +84,8 @@ pub async fn server_info() -> Json<serde_json::Value> {
     let db_size = get_db_size();
 
     let ollama_connected = check_ollama_connected().await;
-    let ollama_model = std::env::var("OLLAMA_EMBEDDING_MODEL")
-        .unwrap_or_else(|_| "all-minilm".to_string());
+    let ollama_model =
+        std::env::var("OLLAMA_EMBEDDING_MODEL").unwrap_or_else(|_| "all-minilm".to_string());
 
     Json(serde_json::json!({
         "version": version,
@@ -695,7 +693,9 @@ pub async fn list_alerts(
                 condition: row.get(2)?,
                 agent_id: row.get(3)?,
                 webhook_url: row.get(4)?,
-                channel_type: row.get::<_, String>(5).unwrap_or_else(|_| "discord".to_string()),
+                channel_type: row
+                    .get::<_, String>(5)
+                    .unwrap_or_else(|_| "discord".to_string()),
                 enabled: row.get::<_, i64>(6)? != 0,
                 silence_minutes: row.get(7)?,
                 created_at: row.get(8)?,
@@ -727,11 +727,17 @@ pub async fn create_alert(
     }
 
     const VALID_CONDITIONS: &[&str] = &[
-        "agent_error", "agent_errored",
-        "agent_offline", "agent_silent",
-        "agent_completed", "agent_running", "agent_starting",
-        "agent_warning", "agent_paused",
-        "agent_stopped", "agent_stopping",
+        "agent_error",
+        "agent_errored",
+        "agent_offline",
+        "agent_silent",
+        "agent_completed",
+        "agent_running",
+        "agent_starting",
+        "agent_warning",
+        "agent_paused",
+        "agent_stopped",
+        "agent_stopping",
         "any_status",
     ];
     if !VALID_CONDITIONS.contains(&req.condition.as_str()) {
@@ -812,14 +818,17 @@ pub async fn delete_alert(
             Json(serde_json::json!({"error": "Database pool error"})),
         )
     })?;
-    conn.execute("DELETE FROM alert_history WHERE alert_rule_id = ?1", params![id])
-        .map_err(|e| {
-            tracing::error!("Failed to delete alert history: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Database error"})),
-            )
-        })?;
+    conn.execute(
+        "DELETE FROM alert_history WHERE alert_rule_id = ?1",
+        params![id],
+    )
+    .map_err(|e| {
+        tracing::error!("Failed to delete alert history: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database error"})),
+        )
+    })?;
     let affected = conn
         .execute("DELETE FROM alert_rules WHERE id = ?1", params![id])
         .map_err(|e| {

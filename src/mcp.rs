@@ -178,14 +178,7 @@ pub async fn post_status(
     {
         let name = agent_name.unwrap_or_else(|| req.agent_id.clone());
         let condition = format!("agent_{}", req.state);
-        evaluate_alerts(
-            db.clone(),
-            &condition,
-            Some(&req.agent_id),
-            &name,
-            &message,
-        )
-        .await;
+        evaluate_alerts(db.clone(), &condition, Some(&req.agent_id), &name, &message).await;
     }
 
     Ok((StatusCode::OK, Json(serde_json::json!({"status": "ok"}))))

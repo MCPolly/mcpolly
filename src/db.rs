@@ -212,7 +212,7 @@ fn run_migrations(conn: &Connection) {
         .is_ok();
     if !has_channel_type {
         conn.execute_batch(
-            "ALTER TABLE alert_rules ADD COLUMN channel_type TEXT NOT NULL DEFAULT 'discord';"
+            "ALTER TABLE alert_rules ADD COLUMN channel_type TEXT NOT NULL DEFAULT 'discord';",
         )
         .expect("Failed to add channel_type column to alert_rules");
     }

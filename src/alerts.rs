@@ -39,8 +39,10 @@ pub async fn evaluate_alerts(
         );
         let mut stmt = conn.prepare(&query).unwrap();
 
-        let params_vec: Vec<&dyn rusqlite::types::ToSql> =
-            aliases.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+        let params_vec: Vec<&dyn rusqlite::types::ToSql> = aliases
+            .iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
 
         let rules: Vec<AlertRule> = stmt
             .query_map(params_vec.as_slice(), |row| {
@@ -50,7 +52,9 @@ pub async fn evaluate_alerts(
                     condition: row.get(2)?,
                     agent_id: row.get(3)?,
                     webhook_url: row.get(4)?,
-                    channel_type: row.get::<_, String>(5).unwrap_or_else(|_| "discord".to_string()),
+                    channel_type: row
+                        .get::<_, String>(5)
+                        .unwrap_or_else(|_| "discord".to_string()),
                     enabled: row.get::<_, i64>(6)? != 0,
                     silence_minutes: row.get(7)?,
                     created_at: row.get(8)?,
@@ -118,7 +122,9 @@ pub async fn evaluate_alerts(
         let history_id = Uuid::new_v4().to_string();
         let delivery_status = match rule.channel_type.as_str() {
             "slack" => send_slack_webhook(&rule.webhook_url, agent_name, condition, message).await,
-            "generic" => send_generic_webhook(&rule.webhook_url, agent_name, condition, message).await,
+            "generic" => {
+                send_generic_webhook(&rule.webhook_url, agent_name, condition, message).await
+            }
             _ => send_discord_webhook(&rule.webhook_url, agent_name, condition, message).await,
         };
 
@@ -167,13 +173,13 @@ fn condition_label(condition: &str) -> &str {
 
 fn condition_discord_color(condition: &str) -> u32 {
     match condition {
-        "agent_error" | "agent_errored" => 0xdc2626,     // red
-        "agent_warning" => 0xca8a04,                      // yellow
-        "agent_completed" => 0x16a34a,                     // green
-        "agent_running" | "agent_starting" => 0x2563eb,   // blue
-        "agent_paused" | "agent_stopping" => 0xca8a04,    // yellow
+        "agent_error" | "agent_errored" => 0xdc2626,    // red
+        "agent_warning" => 0xca8a04,                    // yellow
+        "agent_completed" => 0x16a34a,                  // green
+        "agent_running" | "agent_starting" => 0x2563eb, // blue
+        "agent_paused" | "agent_stopping" => 0xca8a04,  // yellow
         "agent_silent" | "agent_offline" | "agent_stopped" => 0x6b7280, // gray
-        _ => 0x6366f1,                                     // indigo (any_status)
+        _ => 0x6366f1,                                  // indigo (any_status)
     }
 }
 
@@ -412,7 +418,9 @@ pub async fn silent_agent_checker(db: DbPool) {
                         condition: row.get(2)?,
                         agent_id: row.get(3)?,
                         webhook_url: row.get(4)?,
-                        channel_type: row.get::<_, String>(5).unwrap_or_else(|_| "discord".to_string()),
+                        channel_type: row
+                            .get::<_, String>(5)
+                            .unwrap_or_else(|_| "discord".to_string()),
                         enabled: row.get::<_, i64>(6)? != 0,
                         silence_minutes: row.get(7)?,
                         created_at: row.get(8)?,
