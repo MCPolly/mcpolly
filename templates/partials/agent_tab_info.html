@@ -1,0 +1,46 @@
+<div class="agent-info">
+  <table>
+    <tbody>
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Agent ID</td>
+        <td class="mono">{{ agent.id }}</td>
+      </tr>
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Name</td>
+        <td>{{ agent.name }}</td>
+      </tr>
+      {% if agent.description.is_some() %}
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Description</td>
+        <td>{{ agent.description.as_deref().unwrap_or("") }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Status</td>
+        <td><span class="badge badge-{{ agent.status }}">{{ agent.status }}</span></td>
+      </tr>
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Registered</td>
+        <td class="mono">{{ agent.registered_at }}</td>
+      </tr>
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Last Seen</td>
+        <td class="mono">{{ agent.last_seen }}</td>
+      </tr>
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Total Updates</td>
+        <td>{{ agent.total_updates }}</td>
+      </tr>
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Total Errors</td>
+        <td>{{ agent.total_errors }}</td>
+      </tr>
+      {% if agent.last_error.is_some() %}
+      <tr>
+        <td class="text-muted" style="padding-right:24px">Last Error</td>
+        <td style="color:var(--status-error-fg)">{{ agent.last_error.as_deref().unwrap_or("") }}</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>

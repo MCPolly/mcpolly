@@ -124,6 +124,7 @@ pub struct AlertRule {
     pub condition: String, // "agent_error" or "agent_offline"
     pub agent_id: Option<String>,
     pub webhook_url: String,
+    pub channel_type: String, // "discord", "slack", or "generic"
     pub enabled: bool,
     pub silence_minutes: i64,
     pub created_at: String,
@@ -137,6 +138,7 @@ pub struct AlertView {
     pub condition: String,
     pub agent_name: Option<String>,
     pub webhook_url: String,
+    pub channel_type: String,
     pub active: bool,
     pub created_at: String,
 }
@@ -147,10 +149,16 @@ pub struct CreateAlertRuleRequest {
     pub condition: String,
     pub agent_id: Option<String>,
     pub webhook_url: String,
+    #[serde(default = "default_channel_type")]
+    pub channel_type: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default = "default_silence_minutes")]
     pub silence_minutes: Option<i64>,
+}
+
+fn default_channel_type() -> String {
+    "discord".to_string()
 }
 
 fn default_true() -> bool {
@@ -219,6 +227,21 @@ pub struct CreateApiKeyResponse {
     pub label: String,
     pub key: String,
     pub key_prefix: String,
+}
+
+// ─── Tool Call ───
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub agent_id: String,
+    pub tool_name: String,
+    pub input_summary: Option<String>,
+    pub output_summary: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub status: String,
+    pub parent_span_id: Option<String>,
+    pub created_at: String,
 }
 
 // ─── Activity entry for templates ───

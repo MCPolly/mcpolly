@@ -68,15 +68,16 @@ MCPolly is an agent-native status, observability, and knowledge platform for AI 
 | `/settings` | Settings | API key management |
 | `/login` | Login | API key authentication |
 
-## MCP Tools (12 total)
+## MCP Tools (13 total)
 
 | Tool | Description |
 |------|-------------|
 | `register_agent` | Register an agent (idempotent on name), returns agent ID |
 | `post_status` | Post status update (starting/running/warning/error/completed/offline/paused/errored) |
 | `post_error` | Report an error with severity, triggers alerts |
+| `post_tool_call` | Record a tool invocation with name, timing, status, and input/output summaries |
 | `list_agents` | List all agents and their current status |
-| `get_agent_activity` | Get recent activity timeline for an agent |
+| `get_agent_activity` | Get recent activity timeline for an agent (includes tool calls) |
 | `update_prd_embeddings` | Index a PRD document for semantic search |
 | `update_design_embeddings` | Index a design document for semantic search |
 | `search_embeddings` | Semantic search across indexed documents |
@@ -87,6 +88,8 @@ MCPolly is an agent-native status, observability, and knowledge platform for AI 
 
 ## Key Features (Implemented)
 
+- Tool call tracing with purple-coded activity feed entries
+- Docker support (Dockerfile + docker-compose.yml with Ollama sidecar)
 - Dark mode with system preference detection and localStorage persistence
 - Dashboard summary cards with HTMX polling (10s interval)
 - Status filter pills for agent table
@@ -97,7 +100,7 @@ MCPolly is an agent-native status, observability, and knowledge platform for AI 
 - Vector embeddings with sqlite-vec and Ollama
 - Semantic search via MCP tools and web UI
 - Agent spawning with context retrieval from embeddings
-- Discord webhook alerts with retry logic
+- Multi-channel webhook alerts (Discord, Slack, Generic) with retry logic
 - Silent agent detection background task
 
 ## Key Constraints

@@ -1,99 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login — MCPolly</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+{% extends "base.html" %}
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: #1a1a1a;
-      background: #ffffff;
-      line-height: 1.5;
-      font-size: 14px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-    }
+{% block title %}Login — MCPolly{% endblock %}
 
-    .login-box {
-      width: 100%;
-      max-width: 360px;
-      padding: 32px;
-      border: 1px solid #e5e7eb;
-    }
+{% block nav %}{% endblock %}
 
-    .login-box h1 {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-
-    .login-box p {
-      color: #6b7280;
-      font-size: 13px;
-      margin-bottom: 20px;
-    }
-
-    .login-box label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 4px;
-      color: #374151;
-    }
-
-    .login-box input[type="password"] {
-      width: 100%;
-      padding: 8px 10px;
-      font-size: 14px;
-      font-family: inherit;
-      border: 1px solid #d1d5db;
-      border-radius: 2px;
-      background: #ffffff;
-      margin-bottom: 16px;
-    }
-
-    .login-box input:focus {
-      outline: none;
-      border-color: #1f2937;
-    }
-
-    .login-box button {
-      width: 100%;
-      padding: 8px 14px;
-      font-size: 14px;
-      font-weight: 500;
-      font-family: inherit;
-      border: 1px solid #1f2937;
-      background: #1f2937;
-      color: #ffffff;
-      cursor: pointer;
-      border-radius: 2px;
-    }
-
-    .login-box button:hover {
-      background: #374151;
-    }
-
-    .msg-error {
-      padding: 10px 14px;
-      border: 1px solid #dc2626;
-      color: #dc2626;
-      background: #fef2f2;
-      margin-bottom: 16px;
-      font-size: 13px;
-      border-radius: 2px;
-    }
-  </style>
-</head>
-<body>
+{% block page %}
+<div class="login-page">
   <div class="login-box">
-    <h1>MCPolly</h1>
-    <p>Enter your API key to continue.</p>
+    <h1>&#9670; MCPolly</h1>
+    <p class="login-subtitle">Agent Operations Platform</p>
+
+    {% if reset_success %}
+    <div class="msg-success">Keys reset. Check your server terminal for the new API key.</div>
+    {% endif %}
 
     {% if error.is_some() %}
     <div class="msg-error">{{ error.as_deref().unwrap_or("") }}</div>
@@ -104,6 +23,30 @@
       <input type="password" name="api_key" id="api_key" placeholder="mcp_..." required autofocus>
       <button type="submit">Sign In</button>
     </form>
+
+    <div class="login-hint">
+      New here? Run the server and check your terminal for the default API key.
+    </div>
+
+    <div class="login-reset">
+      <button type="button" class="btn-link" onclick="document.getElementById('reset-confirm').showModal()">
+        Forgot API key? Reset your instance
+      </button>
+    </div>
+
+    <dialog id="reset-confirm" class="reset-dialog">
+      <h3>Reset Instance</h3>
+      <p>This will <strong>revoke all existing API keys</strong> and generate a new default key.</p>
+      <p>The new key will be printed to the server's terminal output. Any connected MCP clients will need to be reconfigured.</p>
+      <form method="POST" action="/reset-instance">
+        <div class="dialog-actions">
+          <button type="button" class="btn-secondary" onclick="this.closest('dialog').close()">Cancel</button>
+          <button type="submit" class="btn-danger">Reset All Keys</button>
+        </div>
+      </form>
+    </dialog>
   </div>
-</body>
-</html>
+</div>
+{% endblock %}
+
+{% block scripts %}{% endblock %}

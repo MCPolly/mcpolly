@@ -1,0 +1,10 @@
+target/
+.git/
+*.db
+*.db-wal
+*.db-shm
+.github/
+.cursor/
+.claude/
+*.md
+!README.md

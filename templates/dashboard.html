@@ -7,26 +7,14 @@
   <h1>Agents{% if agents.len() > 0 %} ({{ agents.len() }}){% endif %}</h1>
 </div>
 
-<div class="summary-cards mb-24" id="summary-cards"
+<div class="health-strip mb-24" id="summary-cards"
      hx-get="/partials/summary"
      hx-trigger="every 10s"
      hx-swap="innerHTML">
-  <div class="summary-card">
-    <div class="summary-card-value">{{ total_count }}</div>
-    <div class="summary-card-label">Total Agents</div>
-  </div>
-  <div class="summary-card summary-card-running">
-    <div class="summary-card-value">{{ running_count }}</div>
-    <div class="summary-card-label">Running</div>
-  </div>
-  <div class="summary-card summary-card-errored">
-    <div class="summary-card-value">{{ errored_count }}</div>
-    <div class="summary-card-label">Errored</div>
-  </div>
-  <div class="summary-card summary-card-offline">
-    <div class="summary-card-value">{{ offline_count }}</div>
-    <div class="summary-card-label">Offline</div>
-  </div>
+  <span class="health-strip-item">{{ total_count }} agents</span>
+  <span class="health-strip-item health-strip-running">&#9679; {{ running_count }} running</span>
+  <span class="health-strip-item health-strip-errored">&#9679; {{ errored_count }} errored</span>
+  <span class="health-strip-item health-strip-offline">&#9675; {{ offline_count }} offline</span>
 </div>
 
 <div class="filter-pills mb-16">
@@ -38,12 +26,19 @@
   <button class="filter-pill" onclick="filterAgents(this, 'offline')">Offline</button>
   <button class="filter-pill" onclick="filterAgents(this, 'stopping')">Stopping</button>
   <button class="filter-pill" onclick="filterAgents(this, 'stopped')">Stopped</button>
+  <button class="filter-pill" onclick="filterAgents(this, 'warning')">Warning</button>
+  <button class="filter-pill" onclick="filterAgents(this, 'paused')">Paused</button>
 </div>
 
 {% if agents.is_empty() %}
-<div class="empty-state">
-  <p>No agents registered yet. Configure an agent with your API key to get started.</p>
-  <p class="mt-8"><a href="/settings">Go to Settings</a> to generate an API key.</p>
+<div class="card" style="text-align:center;padding:48px 24px;">
+  <h2 style="margin-bottom:8px;">No agents registered yet</h2>
+  <p class="text-muted" style="margin-bottom:16px;">Connect your first AI agent to MCPolly</p>
+  <p class="text-muted">1. Copy your API key from Settings</p>
+  <p class="text-muted">2. Add MCPolly to your MCP client config</p>
+  <p class="text-muted" style="margin-bottom:16px;">3. Start an agent session</p>
+  <a href="/setup" class="btn btn-primary">Open Setup Guide</a>
+  <a href="/settings" class="btn" style="margin-left:8px;">Go to Settings</a>
 </div>
 {% else %}
 <table>
@@ -52,7 +47,7 @@
       <th>Name</th>
       <th>Status</th>
       <th>Last Update</th>
-      <th>Last Error</th>
+      <th>Last Message</th>
       <th>Actions</th>
     </tr>
   </thead>

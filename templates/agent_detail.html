@@ -7,119 +7,138 @@
   <a href="/">Agents</a><span class="sep">/</span>{{ agent.name }}
 </div>
 
-<div class="flex-between mb-24">
-  <div>
+<div style="margin-bottom:8px;">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
     <span class="status-dot status-dot-{{ agent.status }}"></span>
-    <h1 style="display: inline;">{{ agent.name }}</h1>
-    <span class="badge badge-{{ agent.status }}" style="margin-left: 8px;">{{ agent.status }}</span>
+    <h1 style="display:inline;margin:0;">{{ agent.name }}</h1>
+    <span class="badge badge-{{ agent.status }}">{{ agent.status }}</span>
+  </div>
+  {% if agent.description.is_some() %}
+  <p class="text-muted">{{ agent.description.as_deref().unwrap_or("") }}</p>
+  {% endif %}
+</div>
+
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:24px;">
+  {% if agent.status == "starting" || agent.status == "running" || agent.status == "warning" || agent.status == "paused" %}
+  <form hx-post="/agents/{{ agent.id }}/stop"
+        hx-target="#action-result"
+        hx-swap="innerHTML"
+        hx-confirm="Are you sure you want to stop this agent?"
+        hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1500);"
+        style="margin:0;">
+    <button type="submit" class="btn btn-danger">&#9632; Stop</button>
+  </form>
+  {% else if agent.status == "stopping" %}
+  <form hx-post="/agents/{{ agent.id }}/cancel-stop"
+        hx-target="#action-result"
+        hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1500);"
+        style="margin:0;">
+    <button type="submit" class="btn">Cancel Stop</button>
+  </form>
+  {% endif %}
+
+  <form hx-post="/agents/{{ agent.id }}/set-status"
+        hx-target="#action-result"
+        hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1000);"
+        style="display:flex;gap:4px;margin:0;align-items:center;">
+    <select name="state" style="padding:5px 8px;font-size:13px;font-family:inherit;border:1px solid var(--border-strong);border-radius:var(--border-radius);background:var(--bg-primary);color:var(--text-primary);">
+      <option value="completed" {% if agent.status == "completed" %}selected{% endif %}>Completed</option>
+      <option value="offline" {% if agent.status == "offline" %}selected{% endif %}>Offline</option>
+      <option value="running" {% if agent.status == "running" %}selected{% endif %}>Running</option>
+      <option value="paused" {% if agent.status == "paused" %}selected{% endif %}>Paused</option>
+      <option value="errored" {% if agent.status == "errored" %}selected{% endif %}>Errored</option>
+      <option value="warning" {% if agent.status == "warning" %}selected{% endif %}>Warning</option>
+    </select>
+    <button type="submit" class="btn btn-sm">Set</button>
+  </form>
+
+  <a href="/api/v1/agents/{{ agent.id }}" class="btn btn-ghost" target="_blank" style="text-decoration:none">&#8599; API JSON</a>
+  <div id="action-result"></div>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab(this, 'activity')">Activity</button>
+  <button class="tab-btn" onclick="switchTab(this, 'errors')">Errors{% if agent.total_errors > 0 %} ({{ agent.total_errors }}){% endif %}</button>
+  <button class="tab-btn" onclick="switchTab(this, 'info')">Info</button>
+</div>
+
+<div id="tab-activity" class="tab-content">
+  <div id="activity-feed"
+       hx-get="/agents/{{ agent.id }}/activity?offset=0&amp;limit=50"
+       hx-trigger="every 10s"
+       hx-swap="innerHTML">
+    {% if activities.is_empty() %}
+    <div class="empty-state">
+      <p>No activity recorded yet. This agent has not sent any status updates.</p>
+    </div>
+    {% else %}
+    {% for entry in activities %}
+    {% include "partials/activity_entry.html" %}
+    {% endfor %}
+
+    {% if has_more %}
+    <div class="mt-16" style="text-align: center;">
+      <button class="btn"
+              hx-get="/agents/{{ agent.id }}/activity?offset={{ next_offset }}&amp;limit=50"
+              hx-target="#activity-feed"
+              hx-swap="beforeend"
+              hx-on::after-request="this.parentElement.remove()">
+        Load more
+        <span class="htmx-indicator">Loading...</span>
+      </button>
+    </div>
+    {% endif %}
+    {% endif %}
   </div>
 </div>
 
-{% if agent.description.is_some() %}
-<p class="text-muted mb-24">{{ agent.description.as_deref().unwrap_or("") }}</p>
-{% endif %}
-
-<div class="two-col">
-  <div class="two-col-main">
-    <h2>Activity</h2>
-
-    <div id="activity-feed"
-         hx-get="/agents/{{ agent.id }}/activity?offset=0&amp;limit=50"
-         hx-trigger="every 10s"
-         hx-swap="innerHTML">
-      {% if activities.is_empty() %}
-      <div class="empty-state">
-        <p>No activity recorded yet. This agent has not sent any status updates.</p>
-      </div>
-      {% else %}
-      {% for entry in activities %}
-      {% include "partials/activity_entry.html" %}
-      {% endfor %}
-
-      {% if has_more %}
-      <div class="mt-16" style="text-align: center;">
-        <button class="btn"
-                hx-get="/agents/{{ agent.id }}/activity?offset={{ next_offset }}&amp;limit=50"
-                hx-target="#activity-feed"
-                hx-swap="beforeend"
-                hx-on::after-request="this.parentElement.remove()">
-          Load more
-          <span class="htmx-indicator">Loading...</span>
-        </button>
-      </div>
-      {% endif %}
-      {% endif %}
-    </div>
+<div id="tab-errors" class="tab-content" style="display:none">
+  {% if agent.total_errors == 0 %}
+  <div class="empty-state">
+    <p>No errors recorded for this agent.</p>
   </div>
+  {% else %}
+  {% for entry in activities %}
+  {% if entry.entry_type == "error" %}
+  {% include "partials/activity_entry.html" %}
+  {% endif %}
+  {% endfor %}
+  {% endif %}
+</div>
 
-  <div class="two-col-sidebar">
-    <div class="sidebar-card">
-      <h2>Agent Info</h2>
-      <dl>
-        <dt>Status</dt>
-        <dd><span class="badge badge-{{ agent.status }}">{{ agent.status }}</span></dd>
+<div id="tab-info" class="tab-content" style="display:none">
+  <div class="card">
+    <div class="card-header"><h2>Agent Info</h2></div>
+    <dl style="font-size:13px;">
+      <dt style="color:var(--text-secondary);font-size:12px;text-transform:uppercase;letter-spacing:0.03em;">Status</dt>
+      <dd style="margin:2px 0 0 0;font-weight:500;margin-bottom:12px;"><span class="badge badge-{{ agent.status }}">{{ agent.status }}</span></dd>
 
-        <dt>Agent ID</dt>
-        <dd class="mono">{{ agent.id }}</dd>
+      <dt style="color:var(--text-secondary);font-size:12px;text-transform:uppercase;letter-spacing:0.03em;">Agent ID</dt>
+      <dd class="mono" style="margin:2px 0 0 0;font-weight:500;margin-bottom:12px;">{{ agent.id }}</dd>
 
-        <dt>Registered</dt>
-        <dd>{{ agent.registered_at }}</dd>
+      <dt style="color:var(--text-secondary);font-size:12px;text-transform:uppercase;letter-spacing:0.03em;">Registered</dt>
+      <dd style="margin:2px 0 0 0;font-weight:500;margin-bottom:12px;">{{ agent.registered_at }}</dd>
 
-        <dt>Last Update</dt>
-        <dd>{{ agent.last_seen }}</dd>
+      <dt style="color:var(--text-secondary);font-size:12px;text-transform:uppercase;letter-spacing:0.03em;">Last Update</dt>
+      <dd style="margin:2px 0 0 0;font-weight:500;margin-bottom:12px;">{{ agent.last_seen }}</dd>
 
-        <dt>Total Updates</dt>
-        <dd>{{ agent.total_updates }}</dd>
+      <dt style="color:var(--text-secondary);font-size:12px;text-transform:uppercase;letter-spacing:0.03em;">Total Updates</dt>
+      <dd style="margin:2px 0 0 0;font-weight:500;margin-bottom:12px;">{{ agent.total_updates }}</dd>
 
-        <dt>Total Errors</dt>
-        <dd>{{ agent.total_errors }}</dd>
-      </dl>
-
-      <div class="set-status-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Set Status</h3>
-        <form hx-post="/agents/{{ agent.id }}/set-status"
-              hx-target="#set-status-result"
-              hx-swap="innerHTML"
-              hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1000);"
-              style="display: flex; gap: 6px; align-items: flex-end;">
-          <select name="state" style="flex: 1; padding: 5px 8px; font-size: 13px; font-family: inherit; border: 1px solid var(--border-strong); border-radius: 2px; background: var(--bg-primary); color: var(--text-primary);">
-            <option value="completed" {% if agent.status == "completed" %}selected{% endif %}>Completed</option>
-            <option value="offline" {% if agent.status == "offline" %}selected{% endif %}>Offline</option>
-            <option value="running" {% if agent.status == "running" %}selected{% endif %}>Running</option>
-            <option value="paused" {% if agent.status == "paused" %}selected{% endif %}>Paused</option>
-            <option value="errored" {% if agent.status == "errored" %}selected{% endif %}>Errored</option>
-            <option value="warning" {% if agent.status == "warning" %}selected{% endif %}>Warning</option>
-          </select>
-          <button type="submit" class="btn btn-sm btn-primary">Set</button>
-        </form>
-        <div id="set-status-result" style="margin-top: 8px;"></div>
-      </div>
-
-      <div id="stop-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-        {% if agent.status == "starting" || agent.status == "running" || agent.status == "warning" || agent.status == "paused" %}
-        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--status-error-fg);">Stop Agent</h3>
-        <form hx-post="/agents/{{ agent.id }}/stop"
-              hx-target="#stop-result"
-              hx-swap="innerHTML"
-              hx-confirm="Are you sure you want to stop this agent?"
-              hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1500);">
-          <button type="submit" class="btn btn-danger" style="width: 100%;">Stop Agent</button>
-        </form>
-        {% else if agent.status == "stopping" %}
-        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--status-warning-fg);">Stopping...</h3>
-        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Waiting for agent to acknowledge stop signal.</p>
-        <form hx-post="/agents/{{ agent.id }}/cancel-stop"
-              hx-target="#stop-result"
-              hx-swap="innerHTML"
-              hx-on::after-request="if(event.detail.successful) setTimeout(function(){ window.location.reload(); }, 1500);">
-          <button type="submit" class="btn" style="width: 100%;">Cancel Stop</button>
-        </form>
-        {% else if agent.status == "stopped" %}
-        <p style="font-size: 12px; color: var(--text-secondary);"><span class="badge badge-stopped">stopped</span></p>
-        {% endif %}
-        <div id="stop-result" style="margin-top: 8px;"></div>
-      </div>
-    </div>
+      <dt style="color:var(--text-secondary);font-size:12px;text-transform:uppercase;letter-spacing:0.03em;">Total Errors</dt>
+      <dd style="margin:2px 0 0 0;font-weight:500;">{{ agent.total_errors }}</dd>
+    </dl>
   </div>
 </div>
+
+<script>
+function switchTab(btn, tab) {
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(c) { c.style.display = 'none'; });
+  btn.classList.add('active');
+  document.getElementById('tab-' + tab).style.display = 'block';
+}
+</script>
 {% endblock %}

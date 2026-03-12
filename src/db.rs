@@ -1,7 +1,23 @@
 use r2d2::{ManageConnection, Pool};
 use rusqlite::{params, Connection};
+use std::sync::Mutex;
 
 pub type DbPool = Pool<SqliteConnectionManager>;
+
+static PENDING_SETUP_KEY: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn set_pending_setup_key(key: String) {
+    *PENDING_SETUP_KEY.lock().unwrap() = Some(key);
+}
+
+/// Takes the pending key out (returns it once, then it's gone).
+pub fn take_pending_setup_key() -> Option<String> {
+    PENDING_SETUP_KEY.lock().unwrap().take()
+}
+
+pub fn has_pending_setup_key() -> bool {
+    PENDING_SETUP_KEY.lock().unwrap().is_some()
+}
 
 pub struct SqliteConnectionManager {
     path: String,
@@ -120,6 +136,7 @@ fn run_migrations(conn: &Connection) {
             condition TEXT NOT NULL,
             agent_id TEXT,
             webhook_url TEXT NOT NULL,
+            channel_type TEXT NOT NULL DEFAULT 'discord',
             enabled INTEGER NOT NULL DEFAULT 1,
             silence_minutes INTEGER NOT NULL DEFAULT 5,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -163,6 +180,20 @@ fn run_migrations(conn: &Connection) {
         );
         CREATE INDEX IF NOT EXISTS idx_embedding_docs_source ON embedding_documents(source_type, source_name);
         CREATE INDEX IF NOT EXISTS idx_embedding_docs_agent ON embedding_documents(agent_id);
+
+        CREATE TABLE IF NOT EXISTS tool_calls (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL REFERENCES agents(id),
+            tool_name TEXT NOT NULL,
+            input_summary TEXT,
+            output_summary TEXT,
+            duration_ms INTEGER,
+            status TEXT NOT NULL DEFAULT 'success',
+            parent_span_id TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_agent_id ON tool_calls(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_created_at ON tool_calls(created_at);
         "
     ).expect("Failed to run migrations");
 
@@ -174,6 +205,17 @@ fn run_migrations(conn: &Connection) {
         [],
     )
     .expect("Failed to create vec_embeddings virtual table");
+
+    // Backfill columns that may be missing on older databases
+    let has_channel_type: bool = conn
+        .prepare("SELECT channel_type FROM alert_rules LIMIT 0")
+        .is_ok();
+    if !has_channel_type {
+        conn.execute_batch(
+            "ALTER TABLE alert_rules ADD COLUMN channel_type TEXT NOT NULL DEFAULT 'discord';"
+        )
+        .expect("Failed to add channel_type column to alert_rules");
+    }
 
     tracing::info!("Database migrations completed successfully");
 }
@@ -209,6 +251,8 @@ pub fn seed_default_key_if_empty(conn: &Connection) -> Option<String> {
         eprintln!("║                                                               ║");
         eprintln!("╚═══════════════════════════════════════════════════════════════╝");
         eprintln!();
+
+        set_pending_setup_key(raw_key.clone());
 
         Some(raw_key)
     } else {

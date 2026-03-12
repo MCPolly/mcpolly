@@ -12,6 +12,11 @@
 *.pem
 *.key
 
+# Node (not used — prevent accidental inclusion)
+node_modules/
+package.json
+package-lock.json
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -43,6 +48,7 @@ PRD_VECTOR_EMBEDDINGS.md
 PRD_UI_ENHANCEMENTS.md
 DESIGN_SPEC.md
 DESIGN_UI_ENHANCEMENTS.md
+DESIGN_REVAMP_V1.md
 PRD_*.md
 
 # Claude Code commands (internal development tooling)

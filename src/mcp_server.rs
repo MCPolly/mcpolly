@@ -81,6 +81,24 @@ struct SpawnAgentParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct PostToolCallParams {
+    #[schemars(description = "Agent ID returned from register_agent")]
+    agent_id: String,
+    #[schemars(description = "Name of the tool invoked (e.g. Read, Shell, Grep)")]
+    tool_name: String,
+    #[schemars(description = "Brief summary of input (not full payload)")]
+    input_summary: Option<String>,
+    #[schemars(description = "Brief summary of output")]
+    output_summary: Option<String>,
+    #[schemars(description = "How long the tool call took in milliseconds")]
+    duration_ms: Option<i64>,
+    #[schemars(description = "Result status: success, error, or timeout")]
+    status: Option<String>,
+    #[schemars(description = "Parent span ID for nested tool calls")]
+    parent_span_id: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct StopAgentParams {
     #[schemars(description = "Agent ID to stop")]
     agent_id: String,
@@ -208,11 +226,12 @@ impl McPollyHandler {
                 .ok();
         }
 
-        if is_error_state(&params.state) {
+        {
             let name = agent_name.unwrap_or_else(|| params.agent_id.clone());
+            let condition = format!("agent_{}", params.state);
             evaluate_alerts(
                 self.db.clone(),
-                "agent_errored",
+                &condition,
                 Some(&params.agent_id),
                 &name,
                 &params.message,
@@ -336,7 +355,7 @@ impl McPollyHandler {
     }
 
     #[tool(
-        description = "Get the recent activity timeline for a specific agent including status updates and errors"
+        description = "Get the recent activity timeline for a specific agent including status updates, errors, and tool calls"
     )]
     async fn get_agent_activity(&self, Parameters(params): Parameters<AgentIdParam>) -> String {
         let conn = self.db.get().unwrap();
@@ -347,6 +366,11 @@ impl McPollyHandler {
                 UNION ALL
                 SELECT id, 'error' as event_type, severity, message, created_at
                 FROM errors WHERE agent_id = ?1
+                UNION ALL
+                SELECT id, 'tool_call' as event_type, status as severity,
+                    tool_name || COALESCE(' — ' || input_summary, '') as message,
+                    created_at
+                FROM tool_calls WHERE agent_id = ?1
             ) ORDER BY created_at DESC LIMIT 50",
         ) {
             Ok(s) => s,
@@ -560,6 +584,42 @@ impl McPollyHandler {
     }
 
     #[tool(
+        description = "Record a tool call made by an agent. Tracks individual tool invocations with timing, status, and optional input/output summaries."
+    )]
+    async fn post_tool_call(&self, Parameters(params): Parameters<PostToolCallParams>) -> String {
+        if params.tool_name.trim().is_empty() {
+            return json!({"error": "tool_name is required"}).to_string();
+        }
+
+        let conn = self.db.get().unwrap();
+
+        let agent_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM agents WHERE id = ?1",
+                params![params.agent_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+
+        if !agent_exists {
+            return json!({"error": "Agent not found"}).to_string();
+        }
+
+        let id = Uuid::new_v4().to_string();
+        let status = params.status.unwrap_or_else(|| "success".to_string());
+
+        if let Err(e) = conn.execute(
+            "INSERT INTO tool_calls (id, agent_id, tool_name, input_summary, output_summary, duration_ms, status, parent_span_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![id, params.agent_id, params.tool_name.trim(), params.input_summary, params.output_summary, params.duration_ms, status, params.parent_span_id],
+        ) {
+            return json!({"error": format!("Database error: {e}")}).to_string();
+        }
+
+        json!({"id": id, "status": "ok"}).to_string()
+    }
+
+    #[tool(
         description = "Request an agent to stop. Sets the agent to 'stopping' state and creates a stop request that the agent will detect on its next status check."
     )]
     async fn stop_agent(&self, Parameters(params): Parameters<StopAgentParams>) -> String {
@@ -687,6 +747,7 @@ impl ServerHandler for McPollyHandler {
             .with_instructions(
                 "MCPolly: Status and observability for AI agents. \
                  Use register_agent to create an agent, then post_status and post_error to report progress and issues. \
+                 Use post_tool_call to record individual tool invocations with timing and status. \
                  Use list_agents and get_agent_activity to inspect state.",
             )
     }

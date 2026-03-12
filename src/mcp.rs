@@ -174,12 +174,13 @@ pub async fn post_status(
             .ok();
     }
 
-    // Evaluate alert rules if error state
-    if is_error_state(&req.state) {
+    // Evaluate alert rules for this status change
+    {
         let name = agent_name.unwrap_or_else(|| req.agent_id.clone());
+        let condition = format!("agent_{}", req.state);
         evaluate_alerts(
             db.clone(),
-            "agent_errored",
+            &condition,
             Some(&req.agent_id),
             &name,
             &message,

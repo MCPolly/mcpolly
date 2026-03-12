@@ -1,8 +1,10 @@
-<div class="activity-entry" data-type="{% if entry.entry_type == "error" %}error{% else if entry.state.is_some() %}{{ entry.state.as_deref().unwrap_or("status") }}{% else %}status{% endif %}">
+<div class="activity-entry" data-type="{% if entry.entry_type == "error" %}error{% else if entry.entry_type == "tool_call" %}tool_call{% else if entry.state.is_some() %}{{ entry.state.as_deref().unwrap_or("status") }}{% else %}status{% endif %}">
   <div class="activity-meta">
     <span class="activity-timestamp" title="{{ entry.timestamp }}">{{ entry.timestamp }}</span>
     {% if entry.entry_type == "error" %}
     <span class="badge badge-error">error</span>
+    {% else if entry.entry_type == "tool_call" %}
+    <span class="badge badge-tool">tool</span>
     {% else if entry.entry_type == "status" %}
     <span class="badge badge-status">status</span>
     {% else if entry.entry_type == "warn" %}

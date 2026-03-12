@@ -121,6 +121,13 @@ pub async fn require_auth_or_redirect(req: Request, next: Next) -> Result<Respon
 
     match extract_api_key(&req) {
         Some(key) if validate_key(&db, &key) => Ok(next.run(req).await),
-        _ => Err(Redirect::to("/login").into_response()),
+        _ => {
+            let dest = if crate::db::has_pending_setup_key() {
+                "/setup"
+            } else {
+                "/login"
+            };
+            Err(Redirect::to(dest).into_response())
+        }
     }
 }

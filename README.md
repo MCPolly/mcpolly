@@ -32,20 +32,25 @@ MCPolly exposes a `/mcp` endpoint that speaks the MCP Streamable HTTP protocol (
 ## Features
 
 ### Agent Observability
-- Agent registration and status tracking (starting, running, warning, error, completed, offline, paused, errored)
+- Agent registration and status tracking (starting, running, warning, error, completed, offline, paused, errored, stopping, stopped)
 - Real-time activity feed with color-coded entries
 - Global error feed across all agents
-- Discord webhook alerts with retry logic
-- Silent agent detection
+- Webhook alerts (Discord, Slack, generic) with retry logic
+- Configurable alerts for **any status change** — error, completed, running, starting, warning, paused, stopped, offline, or a catch-all "any status" rule
+- Silent agent detection (background checker)
 
 ### Web Dashboard
 - Dark mode with system preference detection
-- Dashboard summary cards (total/running/errored/offline agent counts)
+- First-run setup wizard with auto-login and MCP configuration snippets
+- Instance reset from the login page (revokes all keys, generates a new one, re-enters setup wizard)
+- Health strip summary (total/running/errored/offline agent counts)
 - Status filter pills for quick agent filtering
-- Agent detail page with status dot, activity timeline, and metadata sidebar
+- Agent detail page with tabbed content (Activity, Errors, Info)
+- Global command bar (Cmd+K) searching agents, errors, and knowledge
 - Alert rules management with notification history
-- Embeddings management with semantic search UI
+- Knowledge page with semantic search UI
 - API key management
+- Settings page with server info and session management
 - 10-second HTMX polling for live updates
 
 ### Knowledge Layer (Vector Embeddings)
@@ -123,7 +128,7 @@ The SQLite database (`mcpolly.db`) is created automatically on first run. The we
 
 ### 3. Get Your API Key
 
-On first run, MCPolly generates a random API key and prints it to the console in a prominent banner:
+On first run, MCPolly generates a default API key and opens the **setup wizard** in your browser. The wizard displays the key and provides ready-to-copy MCP configuration snippets. The key is also printed to the server terminal:
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
@@ -134,9 +139,9 @@ On first run, MCPolly generates a random API key and prints it to the console in
 ╚═══════════════════════════════════════════════════════════════╝
 ```
 
-**Save this key** — it is only displayed once on first startup. Each database has its own unique key; if you delete `mcpolly.db` and restart, a new key will be generated.
+You can create additional keys through the web UI's Settings page (`http://localhost:3000/settings`).
 
-You can also create additional keys through the web UI's Settings page (`http://localhost:3000/settings`).
+**Forgot your API key?** Click "Forgot API key? Reset your instance" on the login page. This revokes all existing keys, generates a new one, and takes you back through the setup wizard.
 
 ### 4. Configure the MCP Client
 
@@ -412,6 +417,26 @@ Once configured, the following MCP tools are available to AI agents:
 | `GET` | `/api/v1/embeddings/search` | Semantic search |
 | `GET` | `/api/v1/embeddings/sources` | List embedding sources |
 | `DELETE` | `/api/v1/embeddings/sources/:name` | Delete embeddings |
+| `GET` | `/api/v1/server/info` | Server version, uptime, DB size |
+
+### Alert Conditions
+
+Alert rules can be configured for any agent status change:
+
+| Condition | Fires when |
+|-----------|------------|
+| `any_status` | Any status update from the agent |
+| `agent_completed` | Agent posts `completed` state |
+| `agent_running` | Agent posts `running` state |
+| `agent_starting` | Agent posts `starting` state |
+| `agent_error` | Agent posts `error` or `errored` state |
+| `agent_warning` | Agent posts `warning` state |
+| `agent_paused` | Agent posts `paused` state |
+| `agent_stopped` | Agent posts `stopped` state |
+| `agent_stopping` | Agent posts `stopping` state |
+| `agent_offline` | Agent goes silent (background checker) |
+
+Supported channels: Discord, Slack, and generic webhook (plain JSON POST).
 
 ### MCP Endpoint
 
@@ -438,6 +463,36 @@ cargo build --bin mcpolly_mcp
 ```bash
 cargo build --release
 ```
+
+## Upgrading
+
+Use the upgrade script to safely update a running MCPolly instance:
+
+```bash
+./upgrade.sh
+```
+
+The script will:
+1. Download and verify the new binary from GitHub Releases
+2. Back up the SQLite database (keeps the last 5 backups)
+3. Gracefully stop the service
+4. Swap the binary
+5. Restart and health-check — with automatic rollback if the new version fails to start
+
+Options:
+
+```bash
+# Upgrade to a specific version
+MCPOLLY_VERSION=v0.3.0 ./upgrade.sh
+
+# Dry run (see what would happen without changing anything)
+MCPOLLY_DRY_RUN=1 ./upgrade.sh
+
+# Skip database backup
+MCPOLLY_SKIP_BACKUP=1 ./upgrade.sh
+```
+
+The upgrade script auto-detects the install location, systemd service type (user or system), and database path.
 
 ## Deployment
 

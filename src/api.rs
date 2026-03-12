@@ -5,12 +5,98 @@ use axum::{
 };
 use rusqlite::params;
 use serde::Deserialize;
+use std::sync::OnceLock;
+use std::time::Instant;
 use uuid::Uuid;
 
 use crate::auth;
 use crate::db::DbPool;
 use crate::embeddings;
 use crate::models::*;
+
+// ─── Server start time tracking ───
+
+static SERVER_START: OnceLock<Instant> = OnceLock::new();
+
+pub fn mark_server_start() {
+    SERVER_START.get_or_init(Instant::now);
+}
+
+pub fn get_uptime_string() -> String {
+    SERVER_START
+        .get()
+        .map(|start| format_uptime(start.elapsed()))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn format_uptime(duration: std::time::Duration) -> String {
+    let secs = duration.as_secs();
+    let hours = secs / 3600;
+    let mins = (secs % 3600) / 60;
+    let s = secs % 60;
+    if hours >= 24 {
+        let days = hours / 24;
+        format!("{}d {}h {}m", days, hours % 24, mins)
+    } else if hours > 0 {
+        format!("{}h {}m {}s", hours, mins, s)
+    } else {
+        format!("{}m {}s", mins, s)
+    }
+}
+
+fn get_db_size() -> String {
+    let db_path =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "mcpolly.db".to_string());
+    match std::fs::metadata(&db_path) {
+        Ok(meta) => {
+            let bytes = meta.len();
+            if bytes < 1024 {
+                format!("{} B", bytes)
+            } else if bytes < 1024 * 1024 {
+                format!("{:.1} KB", bytes as f64 / 1024.0)
+            } else {
+                format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+            }
+        }
+        Err(_) => "unknown".to_string(),
+    }
+}
+
+async fn check_ollama_connected() -> bool {
+    let url = std::env::var("OLLAMA_URL")
+        .unwrap_or_else(|_| "http://localhost:11434".to_string());
+    reqwest::Client::new()
+        .get(format!("{}/api/version", url))
+        .timeout(std::time::Duration::from_secs(2))
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}
+
+/// GET /api/v1/server/info — server info endpoint
+pub async fn server_info() -> Json<serde_json::Value> {
+    let version = std::env::var("MCPOLLY_VERSION").unwrap_or_else(|_| "0.1.1".to_string());
+
+    let uptime = SERVER_START
+        .get()
+        .map(|start| format_uptime(start.elapsed()))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let db_size = get_db_size();
+
+    let ollama_connected = check_ollama_connected().await;
+    let ollama_model = std::env::var("OLLAMA_EMBEDDING_MODEL")
+        .unwrap_or_else(|_| "all-minilm".to_string());
+
+    Json(serde_json::json!({
+        "version": version,
+        "uptime": uptime,
+        "db_size": db_size,
+        "ollama_connected": ollama_connected,
+        "ollama_model": ollama_model,
+    }))
+}
 
 // ─── Agent endpoints (JSON API) ───
 
@@ -128,6 +214,11 @@ pub async fn get_agent_activity(
                 UNION ALL
                 SELECT id, 'error' as event_type, severity, message, created_at
                 FROM errors WHERE agent_id = ?1
+                UNION ALL
+                SELECT id, 'tool_call' as event_type, status as severity,
+                    tool_name || COALESCE(' — ' || input_summary, '') as message,
+                    created_at
+                FROM tool_calls WHERE agent_id = ?1
             ) ORDER BY created_at DESC LIMIT ?2 OFFSET ?3",
         )
         .map_err(|e| {
@@ -159,6 +250,63 @@ pub async fn get_agent_activity(
         .collect();
 
     Ok(Json(entries))
+}
+
+/// GET /api/v1/agents/:id/tool-calls — tool calls for a specific agent (JSON)
+pub async fn get_agent_tool_calls(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<String>,
+    Query(params): Query<PaginationParams>,
+) -> Result<Json<Vec<ToolCall>>, (StatusCode, Json<serde_json::Value>)> {
+    let limit = params.limit.unwrap_or(50).min(100);
+    let offset = params.offset.unwrap_or(0);
+    let conn = db.get().map_err(|e| {
+        tracing::error!("Pool error: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database pool error"})),
+        )
+    })?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, agent_id, tool_name, input_summary, output_summary, duration_ms, status, parent_span_id, created_at
+             FROM tool_calls WHERE agent_id = ?1
+             ORDER BY created_at DESC LIMIT ?2 OFFSET ?3",
+        )
+        .map_err(|e| {
+            tracing::error!("Query error: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
+        })?;
+
+    let calls: Vec<ToolCall> = stmt
+        .query_map(params![id, limit, offset], |row| {
+            Ok(ToolCall {
+                id: row.get(0)?,
+                agent_id: row.get(1)?,
+                tool_name: row.get(2)?,
+                input_summary: row.get(3)?,
+                output_summary: row.get(4)?,
+                duration_ms: row.get(5)?,
+                status: row.get(6)?,
+                parent_span_id: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| {
+            tracing::error!("Query error: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(Json(calls))
 }
 
 /// GET /api/v1/agents/:id/errors — errors for a specific agent (JSON)
@@ -531,7 +679,7 @@ pub async fn list_alerts(
     })?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, condition, agent_id, webhook_url, enabled, silence_minutes, created_at
+            "SELECT id, name, condition, agent_id, webhook_url, channel_type, enabled, silence_minutes, created_at
              FROM alert_rules ORDER BY created_at DESC",
         )
         .map_err(|e| {
@@ -547,9 +695,10 @@ pub async fn list_alerts(
                 condition: row.get(2)?,
                 agent_id: row.get(3)?,
                 webhook_url: row.get(4)?,
-                enabled: row.get::<_, i64>(5)? != 0,
-                silence_minutes: row.get(6)?,
-                created_at: row.get(7)?,
+                channel_type: row.get::<_, String>(5).unwrap_or_else(|_| "discord".to_string()),
+                enabled: row.get::<_, i64>(6)? != 0,
+                silence_minutes: row.get(7)?,
+                created_at: row.get(8)?,
             })
         })
         .map_err(|e| {
@@ -577,18 +726,19 @@ pub async fn create_alert(
         ));
     }
 
-    if ![
-        "agent_error",
-        "agent_offline",
-        "agent_errored",
-        "agent_silent",
-    ]
-    .contains(&req.condition.as_str())
-    {
+    const VALID_CONDITIONS: &[&str] = &[
+        "agent_error", "agent_errored",
+        "agent_offline", "agent_silent",
+        "agent_completed", "agent_running", "agent_starting",
+        "agent_warning", "agent_paused",
+        "agent_stopped", "agent_stopping",
+        "any_status",
+    ];
+    if !VALID_CONDITIONS.contains(&req.condition.as_str()) {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(
-                serde_json::json!({"error": "Condition must be 'agent_error' or 'agent_offline'"}),
+                serde_json::json!({"error": format!("Invalid condition '{}'. Valid: {:?}", req.condition, VALID_CONDITIONS)}),
             ),
         ));
     }
@@ -610,15 +760,22 @@ pub async fn create_alert(
         )
     })?;
 
+    let channel_type = if ["discord", "slack", "generic"].contains(&req.channel_type.as_str()) {
+        req.channel_type.clone()
+    } else {
+        "discord".to_string()
+    };
+
     conn.execute(
-        "INSERT INTO alert_rules (id, name, condition, agent_id, webhook_url, enabled, silence_minutes)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO alert_rules (id, name, condition, agent_id, webhook_url, channel_type, enabled, silence_minutes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             id,
             req.name.trim(),
             req.condition,
             req.agent_id,
             req.webhook_url.trim(),
+            channel_type,
             req.enabled as i64,
             silence_minutes,
         ],
@@ -634,6 +791,7 @@ pub async fn create_alert(
         condition: req.condition,
         agent_id: req.agent_id,
         webhook_url: req.webhook_url,
+        channel_type,
         enabled: req.enabled,
         silence_minutes,
         created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -654,6 +812,14 @@ pub async fn delete_alert(
             Json(serde_json::json!({"error": "Database pool error"})),
         )
     })?;
+    conn.execute("DELETE FROM alert_history WHERE alert_rule_id = ?1", params![id])
+        .map_err(|e| {
+            tracing::error!("Failed to delete alert history: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
+        })?;
     let affected = conn
         .execute("DELETE FROM alert_rules WHERE id = ?1", params![id])
         .map_err(|e| {

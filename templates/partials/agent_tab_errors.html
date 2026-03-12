@@ -1,0 +1,15 @@
+{% if errors.is_empty() %}
+<div class="empty-state">
+  <p>No errors recorded for this agent.</p>
+</div>
+{% else %}
+{% for error in errors %}
+<div class="activity-entry" data-type="error">
+  <div class="activity-meta">
+    <span class="activity-timestamp" title="{{ error.timestamp }}">{{ error.timestamp }}</span>
+    <span class="badge badge-error">{{ error.severity }}</span>
+  </div>
+  <div class="activity-message expandable" onclick="this.classList.toggle('expanded')">{{ error.message }}</div>
+</div>
+{% endfor %}
+{% endif %}

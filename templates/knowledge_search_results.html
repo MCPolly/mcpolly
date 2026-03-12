@@ -1,0 +1,19 @@
+{% if results.is_empty() %}
+<div class="empty-state">
+  <p>No results found for "{{ query }}". Try a different query.</p>
+</div>
+{% else %}
+<p class="text-muted mb-16">{{ results.len() }} result{% if results.len() != 1 %}s{% endif %} for "{{ query }}"</p>
+
+{% for result in results %}
+<div class="activity-entry">
+  <div class="activity-meta">
+    <strong>{{ result.heading }}</strong>
+    <span class="badge badge-info">{{ result.source_type }}</span>
+    <span class="badge badge-offline">{{ result.source_name }}</span>
+    <span class="text-muted" style="margin-left:auto;font-size:12px">{{ result.relevance_pct|fmt("{:.0}") }}% relevant</span>
+  </div>
+  <div class="activity-message" style="margin-top:4px;color:var(--text-secondary)">{{ result.content }}</div>
+</div>
+{% endfor %}
+{% endif %}

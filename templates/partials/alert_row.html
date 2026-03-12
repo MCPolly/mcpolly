@@ -15,7 +15,15 @@
     All agents
     {% endif %}
   </td>
-  <td>Discord</td>
+  <td>
+    {% if alert.channel_type == "slack" %}
+    Slack
+    {% else if alert.channel_type == "generic" %}
+    Generic
+    {% else %}
+    Discord
+    {% endif %}
+  </td>
   <td>
     {% if alert.active %}
     <span class="badge badge-active">active</span>

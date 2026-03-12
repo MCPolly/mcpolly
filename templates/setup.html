@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Setup — MCPolly{% endblock %}
+
+{% block content %}
+<div class="setup-wizard">
+  <h1 class="mb-16">Welcome to MCPolly</h1>
+  <p class="text-muted mb-24">Complete these steps to connect your first AI agent.</p>
+
+  <div class="setup-steps">
+    <div class="setup-step" id="step-1">
+      <h2>Step 1: Your API Key</h2>
+      <p>Use this API key to authenticate your MCP clients and agents:</p>
+      <div class="key-display" style="display:flex;align-items:center;gap:8px;margin:16px 0">
+        <code id="api-key-value" style="flex:1;padding:8px 12px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;word-break:break-all">{{ api_key }}</code>
+        <button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('api-key-value').textContent).then(function(){this.textContent='Copied!'}.bind(this))">Copy</button>
+      </div>
+      <p class="text-muted" style="font-size:13px">Save this key securely — you'll need it to configure MCP clients.</p>
+    </div>
+
+    <div class="setup-step" id="step-2" style="display:none">
+      <h2>Step 2: Configure Your MCP Client</h2>
+      <p>Add the following to your MCP client configuration:</p>
+
+      <h3 style="margin-top:16px;font-size:14px">Cursor / Claude Desktop</h3>
+      <pre style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;padding:12px;overflow-x:auto;font-size:13px"><code>{{ cursor_config }}</code></pre>
+
+      <h3 style="margin-top:16px;font-size:14px">Claude Code (CLAUDE.md)</h3>
+      <pre style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;padding:12px;overflow-x:auto;font-size:13px"><code>{{ claude_config }}</code></pre>
+    </div>
+
+    <div class="setup-step" id="step-3" style="display:none">
+      <h2>Step 3: Verify Connection</h2>
+      <p>Start your AI agent with MCPolly configured. It will appear here automatically.</p>
+
+      <div id="agent-check"
+           hx-get="/search/agents?q="
+           hx-trigger="every 3s"
+           hx-target="#agent-check-result"
+           style="margin:24px 0;padding:16px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px">
+        {% if has_agents %}
+        <div class="msg-success">Agent connected! You're all set.</div>
+        {% else %}
+        <div id="agent-check-result">
+          <p class="text-muted">Waiting for first agent connection...</p>
+          <div class="htmx-indicator">Checking...</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:24px">
+    <button id="prev-btn" class="btn" onclick="setupPrev()" style="display:none">Previous</button>
+    <button id="next-btn" class="btn btn-primary" onclick="setupNext()">Next</button>
+    <a id="done-btn" href="/" class="btn btn-primary" style="display:none"
+       onclick="document.cookie='mcpolly_setup_complete=1;path=/;max-age=31536000'">Go to Dashboard</a>
+  </div>
+</div>
+
+<script>
+var currentStep = 1;
+function setupNext() {
+  if (currentStep < 3) {
+    document.getElementById('step-' + currentStep).style.display = 'none';
+    currentStep++;
+    document.getElementById('step-' + currentStep).style.display = '';
+    updateSetupNav();
+  }
+}
+function setupPrev() {
+  if (currentStep > 1) {
+    document.getElementById('step-' + currentStep).style.display = 'none';
+    currentStep--;
+    document.getElementById('step-' + currentStep).style.display = '';
+    updateSetupNav();
+  }
+}
+function updateSetupNav() {
+  document.getElementById('prev-btn').style.display = currentStep > 1 ? '' : 'none';
+  document.getElementById('next-btn').style.display = currentStep < 3 ? '' : 'none';
+  document.getElementById('done-btn').style.display = currentStep === 3 ? '' : 'none';
+}
+</script>
+{% endblock %}

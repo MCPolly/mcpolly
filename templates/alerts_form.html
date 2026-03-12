@@ -1,4 +1,4 @@
-<div style="border: 1px solid #e5e7eb; padding: 16px; margin-bottom: 16px;">
+<div class="inline-form">
   <h2 class="mb-16">New Alert Rule</h2>
   <form hx-post="/alerts"
         hx-target="#alert-form-container"
@@ -8,8 +8,24 @@
       <label for="condition">Condition</label>
       <select name="condition" id="condition" required>
         <option value="">Select a condition</option>
-        <option value="agent_error">Agent Error</option>
-        <option value="agent_offline">Agent Offline</option>
+        <optgroup label="Any">
+          <option value="any_status">Any Status Change</option>
+        </optgroup>
+        <optgroup label="Lifecycle">
+          <option value="agent_completed">Agent Completed</option>
+          <option value="agent_starting">Agent Starting</option>
+          <option value="agent_running">Agent Running</option>
+          <option value="agent_stopped">Agent Stopped</option>
+          <option value="agent_offline">Agent Offline / Silent</option>
+        </optgroup>
+        <optgroup label="Problems">
+          <option value="agent_error">Agent Error</option>
+          <option value="agent_warning">Agent Warning</option>
+        </optgroup>
+        <optgroup label="Other">
+          <option value="agent_paused">Agent Paused</option>
+          <option value="agent_stopping">Agent Stopping</option>
+        </optgroup>
       </select>
     </div>
 
@@ -24,7 +40,16 @@
     </div>
 
     <div class="form-group">
-      <label for="webhook_url">Discord Webhook URL</label>
+      <label for="channel_type">Channel</label>
+      <select name="channel_type" id="channel_type" required onchange="updateWebhookPlaceholder()">
+        <option value="discord">Discord</option>
+        <option value="slack">Slack</option>
+        <option value="generic">Generic Webhook</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="webhook_url" id="webhook_url_label">Webhook URL</label>
       <input type="url" name="webhook_url" id="webhook_url" placeholder="https://discord.com/api/webhooks/..." required>
     </div>
 
@@ -36,4 +61,17 @@
               hx-swap="innerHTML">Cancel</button>
     </div>
   </form>
+  <script>
+    function updateWebhookPlaceholder() {
+      var ch = document.getElementById('channel_type').value;
+      var inp = document.getElementById('webhook_url');
+      if (ch === 'slack') {
+        inp.placeholder = 'https://hooks.slack.com/services/...';
+      } else if (ch === 'generic') {
+        inp.placeholder = 'https://your-endpoint.example.com/webhook';
+      } else {
+        inp.placeholder = 'https://discord.com/api/webhooks/...';
+      }
+    }
+  </script>
 </div>

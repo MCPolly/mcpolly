@@ -43,6 +43,8 @@ async fn main() {
         db::seed_default_key_if_empty(&conn);
     }
 
+    api::mark_server_start();
+
     let bg_db = db.clone();
     tokio::spawn(async move {
         alerts::silent_agent_checker(bg_db).await;
@@ -55,6 +57,7 @@ async fn main() {
         .route("/agents/:id", get(api::get_agent))
         .route("/agents/:id/activity", get(api::get_agent_activity))
         .route("/agents/:id/errors", get(api::get_agent_errors))
+        .route("/agents/:id/tool-calls", get(api::get_agent_tool_calls))
         .route("/agents/:id/status", put(api::set_agent_status))
         .route(
             "/agents/:id/stop",
@@ -76,6 +79,7 @@ async fn main() {
             "/embeddings/sources/:name",
             delete(api::delete_embedding_source),
         )
+        .route("/server/info", get(api::server_info))
         .layer(middleware::from_fn(auth::require_api_key));
 
     // HTMX UI routes — authenticated via cookie, redirects to /login if missing
@@ -87,6 +91,7 @@ async fn main() {
             "/agents/:id/activity",
             get(templates::agent_activity_fragment),
         )
+        .route("/agents/:id/tab/:tab", get(templates::agent_tab))
         .route(
             "/agents/:id/set-status",
             post(templates::set_agent_status_html),
@@ -113,7 +118,18 @@ async fn main() {
         )
         .route("/settings/keys", post(templates::create_key_form))
         .route("/settings/keys/:id", delete(templates::revoke_key_html))
-        .route("/embeddings", get(templates::embeddings_page))
+        .route("/search", get(templates::unified_search))
+        .route("/search/agents", get(templates::search_agents))
+        .route("/search/errors", get(templates::search_errors))
+        .route("/search/knowledge", get(templates::search_knowledge))
+        .route("/settings/server-info", get(templates::server_info_partial))
+        .route("/knowledge", get(templates::knowledge_page))
+        .route("/knowledge/search", get(templates::knowledge_search))
+        .route(
+            "/knowledge/sources/:name",
+            delete(templates::delete_embedding_source_html),
+        )
+        .route("/embeddings", get(templates::embeddings_redirect))
         .route("/embeddings/search", get(templates::embeddings_search))
         .route(
             "/embeddings/sources/:name",
@@ -140,6 +156,8 @@ async fn main() {
             get(templates::login_page).post(templates::login_submit),
         )
         .route("/logout", post(templates::logout))
+        .route("/reset-instance", post(templates::reset_instance))
+        .route("/setup", get(templates::setup_page))
         .route("/health", get(health_check));
 
     let app = Router::new()

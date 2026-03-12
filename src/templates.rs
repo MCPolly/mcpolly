@@ -2,14 +2,36 @@ use askama::Template;
 use axum::{
     extract::Extension,
     extract::{Path, Query},
-    http::{self, StatusCode},
-    response::{Html, IntoResponse, Response},
+    http::{self, HeaderMap, StatusCode},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use rusqlite::params;
 use serde::Deserialize;
 
 use crate::db::DbPool;
 use crate::models::*;
+
+// ─── Cookie helpers ───
+
+fn has_setup_cookie(headers: &HeaderMap) -> bool {
+    headers
+        .get("cookie")
+        .and_then(|c| c.to_str().ok())
+        .map(|s| s.contains("mcpolly_setup_complete"))
+        .unwrap_or(false)
+}
+
+fn extract_cookie_key(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("cookie")
+        .and_then(|c| c.to_str().ok())
+        .and_then(|s| {
+            s.split(';')
+                .filter_map(|part| part.trim().strip_prefix("mcpolly_key="))
+                .next()
+                .map(|v| v.trim().to_string())
+        })
+}
 
 // ─── Pagination params ───
 
@@ -95,6 +117,7 @@ pub struct SettingsKeyFormTemplate {}
 #[template(path = "login.html")]
 pub struct LoginTemplate {
     pub error: Option<String>,
+    pub reset_success: bool,
 }
 
 // ─── Embeddings ───
@@ -116,6 +139,7 @@ pub struct SearchResultView {
     pub distance: String,
 }
 
+#[allow(dead_code)]
 #[derive(Template)]
 #[template(path = "embeddings.html")]
 pub struct EmbeddingsTemplate {
@@ -149,6 +173,64 @@ pub struct ErrorsTemplate {
     pub total_errors: i64,
     pub has_more: bool,
     pub next_offset: i64,
+}
+
+// ─── Setup wizard ───
+
+#[derive(Template)]
+#[template(path = "setup.html")]
+pub struct SetupTemplate {
+    pub active_nav: String,
+    pub api_key: String,
+    pub has_agents: bool,
+    pub cursor_config: String,
+    pub claude_config: String,
+}
+
+// ─── Knowledge page (renamed from Embeddings) ───
+
+#[derive(Debug, Clone)]
+pub struct KnowledgeSearchResultView {
+    pub heading: String,
+    pub content: String,
+    pub source_name: String,
+    pub source_type: String,
+    pub relevance_pct: f64,
+}
+
+#[derive(Template)]
+#[template(path = "knowledge.html")]
+pub struct KnowledgeTemplate {
+    pub active_nav: String,
+    pub sources: Vec<EmbeddingSourceView>,
+}
+
+#[derive(Template)]
+#[template(path = "knowledge_search_results.html")]
+pub struct KnowledgeSearchResultsTemplate {
+    pub results: Vec<KnowledgeSearchResultView>,
+    pub query: String,
+}
+
+// ─── Agent tab partials ───
+
+#[derive(Template)]
+#[template(path = "partials/agent_tab_errors.html")]
+pub struct AgentTabErrorsTemplate {
+    pub errors: Vec<ErrorView>,
+}
+
+#[derive(Template)]
+#[template(path = "partials/agent_tab_info.html")]
+pub struct AgentTabInfoTemplate {
+    pub agent: AgentView,
+}
+
+// ─── Search params (command bar) ───
+
+#[derive(Debug, Deserialize)]
+pub struct SearchParams {
+    pub q: Option<String>,
 }
 
 // ─── Status filter params ───
@@ -224,6 +306,11 @@ fn query_activity(
                 UNION ALL
                 SELECT 'error' as entry_type, severity as state, message, created_at
                 FROM errors WHERE agent_id = ?1
+                UNION ALL
+                SELECT 'tool_call' as entry_type, status as state,
+                    tool_name || COALESCE(' — ' || input_summary, '') || COALESCE(' [' || duration_ms || 'ms]', '') as message,
+                    created_at
+                FROM tool_calls WHERE agent_id = ?1
             ) ORDER BY created_at DESC LIMIT ?2 OFFSET ?3",
         )
         .unwrap();
@@ -231,7 +318,7 @@ fn query_activity(
     stmt.query_map(params![agent_id, limit, offset], |row| {
         let entry_type: String = row.get(0)?;
         let state_val: String = row.get(1)?;
-        let state = if entry_type == "status" {
+        let state = if entry_type == "status" || entry_type == "tool_call" {
             Some(state_val)
         } else {
             None
@@ -251,9 +338,17 @@ fn query_activity(
 // ─── Route handlers ───
 
 /// GET / — dashboard
-pub async fn dashboard(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
+pub async fn dashboard(
+    headers: HeaderMap,
+    Extension(db): Extension<DbPool>,
+) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let rows = query_agent_rows(&conn);
+
+    if !has_setup_cookie(&headers) {
+        return Ok(Redirect::to("/setup").into_response());
+    }
+
     let agents: Vec<AgentView> = rows.iter().map(|r| agent_row_to_view(&conn, r)).collect();
 
     let total_count = agents.len();
@@ -342,22 +437,10 @@ pub async fn summary_partial(Extension(db): Extension<DbPool>) -> Result<Respons
         .count();
 
     let html = format!(
-        r#"<div class="summary-card">
-  <div class="summary-card-value">{}</div>
-  <div class="summary-card-label">Total Agents</div>
-</div>
-<div class="summary-card summary-card-running">
-  <div class="summary-card-value">{}</div>
-  <div class="summary-card-label">Running</div>
-</div>
-<div class="summary-card summary-card-errored">
-  <div class="summary-card-value">{}</div>
-  <div class="summary-card-label">Errored</div>
-</div>
-<div class="summary-card summary-card-offline">
-  <div class="summary-card-value">{}</div>
-  <div class="summary-card-label">Offline</div>
-</div>"#,
+        r#"<span class="health-strip-item">{} agents</span>
+<span class="health-strip-item health-strip-running">&#9679; {} running</span>
+<span class="health-strip-item health-strip-errored">&#9679; {} errored</span>
+<span class="health-strip-item health-strip-offline">&#9675; {} offline</span>"#,
         total, running, errored, offline
     );
 
@@ -438,7 +521,7 @@ pub async fn alerts_page(Extension(db): Extension<DbPool>) -> Result<Response, S
 
     let mut rules_stmt = conn
         .prepare(
-            "SELECT ar.id, ar.condition, ar.agent_id, ar.webhook_url, ar.enabled, ar.created_at, a.name
+            "SELECT ar.id, ar.condition, ar.agent_id, ar.webhook_url, ar.channel_type, ar.enabled, ar.created_at, a.name
              FROM alert_rules ar LEFT JOIN agents a ON ar.agent_id = a.id
              ORDER BY ar.created_at DESC",
         )
@@ -449,10 +532,11 @@ pub async fn alerts_page(Extension(db): Extension<DbPool>) -> Result<Response, S
             Ok(AlertView {
                 id: row.get(0)?,
                 condition: row.get(1)?,
-                agent_name: row.get(6)?,
+                agent_name: row.get(7)?,
                 webhook_url: row.get(3)?,
-                active: row.get::<_, i64>(4)? != 0,
-                created_at: row.get(5)?,
+                channel_type: row.get::<_, String>(4).unwrap_or_else(|_| "discord".to_string()),
+                active: row.get::<_, i64>(5)? != 0,
+                created_at: row.get(6)?,
             })
         })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -524,12 +608,18 @@ pub async fn create_alert_form(
 
     let id = uuid::Uuid::new_v4().to_string();
 
+    let channel_type = if ["discord", "slack", "generic"].contains(&form.channel_type.as_str()) {
+        form.channel_type
+    } else {
+        "discord".to_string()
+    };
+
     {
         let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         conn.execute(
-            "INSERT INTO alert_rules (id, name, condition, agent_id, webhook_url, enabled, silence_minutes)
-             VALUES (?1, ?2, ?3, ?4, ?5, 1, 5)",
-            params![id, form.condition, form.condition, agent_id, form.webhook_url.trim()],
+            "INSERT INTO alert_rules (id, name, condition, agent_id, webhook_url, channel_type, enabled, silence_minutes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, 5)",
+            params![id, form.condition, form.condition, agent_id, form.webhook_url.trim(), channel_type],
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
@@ -543,6 +633,12 @@ pub struct AlertFormData {
     pub condition: String,
     pub agent_id: Option<String>,
     pub webhook_url: String,
+    #[serde(default = "default_form_channel_type")]
+    pub channel_type: String,
+}
+
+fn default_form_channel_type() -> String {
+    "discord".to_string()
 }
 
 /// DELETE /alerts/:id — delete alert (HTMX)
@@ -551,10 +647,11 @@ pub async fn delete_alert_html(
     Path(id): Path<String>,
 ) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    conn.execute("DELETE FROM alert_history WHERE alert_rule_id = ?1", params![id])
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     conn.execute("DELETE FROM alert_rules WHERE id = ?1", params![id])
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Return empty to remove the row via hx-swap="outerHTML"
     Ok(Html(String::new()).into_response())
 }
 
@@ -734,7 +831,8 @@ pub struct EmbeddingsSearchParams {
     pub source_type: Option<String>,
 }
 
-/// GET /embeddings — embeddings page with sources list
+/// GET /embeddings — embeddings page with sources list (legacy, replaced by /knowledge)
+#[allow(dead_code)]
 pub async fn embeddings_page(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
     let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -1087,11 +1185,654 @@ pub async fn cancel_stop_html(
     .into_response())
 }
 
+// ─── Setup wizard handler ───
+
+/// GET /setup — first-run setup wizard (public route, handles its own auth)
+pub async fn setup_page(
+    headers: HeaderMap,
+    Extension(db): Extension<DbPool>,
+) -> Result<Response, StatusCode> {
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // If there's a pending setup key (first-run or post-reset), consume it
+    // and auto-authenticate the user by setting the session cookie.
+    if let Some(pending_key) = crate::db::take_pending_setup_key() {
+        let agent_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agents", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+        let host = std::env::var("MCPOLLY_HOST")
+            .unwrap_or_else(|_| format!("http://localhost:{}", port));
+
+        let cursor_config = format!(
+            "{{\n  \"mcpServers\": {{\n    \"mcpolly\": {{\n      \"url\": \"{}/mcp\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {}\"\n      }}\n    }}\n  }}\n}}",
+            host, pending_key
+        );
+        let claude_config = cursor_config.clone();
+
+        let template = SetupTemplate {
+            active_nav: String::new(),
+            api_key: pending_key.clone(),
+            has_agents: agent_count > 0,
+            cursor_config,
+            claude_config,
+        };
+
+        let html = template.into_response();
+        let (mut parts, body) = html.into_parts();
+        let cookie = format!(
+            "mcpolly_key={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800",
+            pending_key
+        );
+        parts
+            .headers
+            .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+        return Ok(http::Response::from_parts(parts, body));
+    }
+
+    // No pending key — require authentication
+    let api_key = match extract_cookie_key(&headers) {
+        Some(key) if crate::auth::validate_key(&db, &key) => key,
+        _ => return Ok(Redirect::to("/login").into_response()),
+    };
+
+    let agent_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM agents", [], |row| row.get(0))
+        .unwrap_or(0);
+    let has_agents = agent_count > 0;
+
+    if has_agents && has_setup_cookie(&headers) {
+        return Ok(Redirect::to("/").into_response());
+    }
+
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let host = std::env::var("MCPOLLY_HOST")
+        .unwrap_or_else(|_| format!("http://localhost:{}", port));
+
+    let cursor_config = format!(
+        "{{\n  \"mcpServers\": {{\n    \"mcpolly\": {{\n      \"url\": \"{}/mcp\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {}\"\n      }}\n    }}\n  }}\n}}",
+        host, api_key
+    );
+    let claude_config = cursor_config.clone();
+
+    let template = SetupTemplate {
+        active_nav: String::new(),
+        api_key,
+        has_agents,
+        cursor_config,
+        claude_config,
+    };
+    Ok(template.into_response())
+}
+
+// ─── Command bar search handlers ───
+
+/// GET /search/agents?q= — command bar agent name search
+pub async fn search_agents(
+    Extension(db): Extension<DbPool>,
+    Query(params): Query<SearchParams>,
+) -> Result<Html<String>, StatusCode> {
+    let query = params.q.unwrap_or_default();
+    if query.trim().is_empty() {
+        return Ok(Html(String::new()));
+    }
+
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, current_state, last_update_at FROM agents
+             WHERE name LIKE '%' || ?1 || '%' ORDER BY last_update_at DESC NULLS LAST LIMIT 5",
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut html = String::new();
+    let rows = stmt
+        .query_map(params![query], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    for row in rows.filter_map(|r| r.ok()) {
+        let (id, name, status, last_update) = row;
+        let last_seen = last_update
+            .as_deref()
+            .map(crate::models::relative_time)
+            .unwrap_or_else(|| "never".to_string());
+        html.push_str(&format!(
+            r#"<a href="/agents/{}" class="search-result">
+  <span class="search-result-name">{}</span>
+  <span class="badge badge-{}">{}</span>
+  <span class="search-result-meta">{}</span>
+</a>"#,
+            id, name, status, status, last_seen
+        ));
+    }
+
+    if html.is_empty() {
+        html = r#"<div class="search-empty">No agents found</div>"#.to_string();
+    }
+
+    Ok(Html(html))
+}
+
+/// GET /search/errors?q= — command bar error message search
+pub async fn search_errors(
+    Extension(db): Extension<DbPool>,
+    Query(params): Query<SearchParams>,
+) -> Result<Html<String>, StatusCode> {
+    let query = params.q.unwrap_or_default();
+    if query.trim().is_empty() {
+        return Ok(Html(String::new()));
+    }
+
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT a.name, e.message, e.created_at FROM errors e
+             JOIN agents a ON e.agent_id = a.id
+             WHERE e.message LIKE '%' || ?1 || '%'
+             ORDER BY e.created_at DESC LIMIT 5",
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut html = String::new();
+    let rows = stmt
+        .query_map(params![query], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    for row in rows.filter_map(|r| r.ok()) {
+        let (agent_name, message, timestamp) = row;
+        let time_str = crate::models::relative_time(&timestamp);
+        let truncated_msg = if message.len() > 80 {
+            format!("{}...", &message[..80])
+        } else {
+            message
+        };
+        html.push_str(&format!(
+            r#"<div class="search-result">
+  <span class="search-result-name">{}</span>
+  <span class="search-result-detail">{}</span>
+  <span class="search-result-meta">{}</span>
+</div>"#,
+            agent_name, truncated_msg, time_str
+        ));
+    }
+
+    if html.is_empty() {
+        html = r#"<div class="search-empty">No errors found</div>"#.to_string();
+    }
+
+    Ok(Html(html))
+}
+
+/// GET /search/knowledge?q= — command bar semantic search
+pub async fn search_knowledge(
+    Extension(db): Extension<DbPool>,
+    Query(params): Query<SearchParams>,
+) -> Result<Html<String>, StatusCode> {
+    let query = params.q.unwrap_or_default();
+    if query.trim().is_empty() {
+        return Ok(Html(String::new()));
+    }
+
+    let search_results = crate::embeddings::search(&db, &query, None, 3).await;
+
+    let mut html = String::new();
+    match search_results {
+        Ok(results) => {
+            for r in results {
+                let relevance_pct = ((2.0 - r.distance) / 2.0 * 100.0).max(0.0);
+                html.push_str(&format!(
+                    r#"<div class="search-result">
+  <span class="search-result-name">{}</span>
+  <span class="badge badge-info">{}</span>
+  <span class="search-result-meta">{:.0}% relevant</span>
+</div>"#,
+                    r.heading, r.source_name, relevance_pct
+                ));
+            }
+        }
+        Err(_) => {
+            html = r#"<div class="search-empty">Search unavailable</div>"#.to_string();
+        }
+    }
+
+    if html.is_empty() {
+        html = r#"<div class="search-empty">No results found</div>"#.to_string();
+    }
+
+    Ok(Html(html))
+}
+
+// ─── Agent tab handlers ───
+
+/// GET /agents/:id/tab/:tab — tab content for agent detail
+pub async fn agent_tab(
+    Extension(db): Extension<DbPool>,
+    Path((id, tab)): Path<(String, String)>,
+) -> Result<Response, StatusCode> {
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match tab.as_str() {
+        "activity" => {
+            let limit: i64 = 50;
+            let activities = query_activity(&conn, &id, limit + 1, 0);
+            let has_more = activities.len() as i64 > limit;
+            let entries: Vec<ActivityEntry> =
+                activities.into_iter().take(limit as usize).collect();
+
+            let template = ActivityFragmentTemplate {
+                entries,
+                agent_id: id,
+                next_offset: limit,
+                has_more,
+            };
+            Ok(template.into_response())
+        }
+        "errors" => {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT a.id, a.name, e.severity, e.message, e.created_at
+                     FROM errors e JOIN agents a ON e.agent_id = a.id
+                     WHERE e.agent_id = ?1
+                     ORDER BY e.created_at DESC LIMIT 50",
+                )
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            let errors: Vec<ErrorView> = stmt
+                .query_map(params![id], |row| {
+                    Ok(ErrorView {
+                        agent_id: row.get(0)?,
+                        agent_name: row.get(1)?,
+                        severity: row.get(2)?,
+                        message: row.get(3)?,
+                        timestamp: row
+                            .get::<_, String>(4)
+                            .map(|ts| crate::models::relative_time(&ts))
+                            .unwrap_or_else(|_| "unknown".to_string()),
+                    })
+                })
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            let template = AgentTabErrorsTemplate { errors };
+            Ok(template.into_response())
+        }
+        "info" => {
+            let row = conn
+                .query_row(
+                    "SELECT id, name, description, metadata_json, current_state, last_message, last_error_message, registered_at, last_update_at
+                     FROM agents WHERE id = ?1",
+                    params![id],
+                    |row| {
+                        Ok(AgentRow {
+                            id: row.get(0)?,
+                            name: row.get(1)?,
+                            description: row.get(2)?,
+                            metadata_json: row.get(3)?,
+                            current_state: row.get(4)?,
+                            last_message: row.get(5)?,
+                            last_error_message: row.get(6)?,
+                            registered_at: row.get(7)?,
+                            last_update_at: row.get(8)?,
+                        })
+                    },
+                )
+                .map_err(|_| StatusCode::NOT_FOUND)?;
+
+            let agent = agent_row_to_view(&conn, &row);
+            let template = AgentTabInfoTemplate { agent };
+            Ok(template.into_response())
+        }
+        _ => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+// ─── Knowledge page handlers ───
+
+/// GET /knowledge — knowledge page (renamed from /embeddings)
+pub async fn knowledge_page(Extension(db): Extension<DbPool>) -> Result<Response, StatusCode> {
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT source_type, source_name, COUNT(*) as chunk_count, MAX(updated_at) as last_updated
+             FROM embedding_documents GROUP BY source_type, source_name ORDER BY last_updated DESC",
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let sources: Vec<EmbeddingSourceView> = stmt
+        .query_map([], |row| {
+            Ok(EmbeddingSourceView {
+                source_type: row.get(0)?,
+                source_name: row.get(1)?,
+                chunk_count: row.get(2)?,
+                last_updated: row
+                    .get::<_, String>(3)
+                    .map(|ts| crate::models::relative_time(&ts))
+                    .unwrap_or_else(|_| "unknown".to_string()),
+            })
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let template = KnowledgeTemplate {
+        active_nav: "knowledge".to_string(),
+        sources,
+    };
+    Ok(template.into_response())
+}
+
+/// GET /knowledge/search — knowledge search results partial (with relevance %)
+pub async fn knowledge_search(
+    Extension(db): Extension<DbPool>,
+    Query(params): Query<EmbeddingsSearchParams>,
+) -> Result<Response, StatusCode> {
+    let query = params.q.unwrap_or_default();
+    if query.trim().is_empty() {
+        let template = KnowledgeSearchResultsTemplate {
+            results: vec![],
+            query,
+        };
+        return Ok(template.into_response());
+    }
+
+    let source_type_filter = params.source_type.filter(|s| !s.is_empty());
+
+    let search_results =
+        crate::embeddings::search(&db, &query, source_type_filter.as_deref(), 10).await;
+
+    let results = match search_results {
+        Ok(sr) => sr
+            .into_iter()
+            .map(|r| {
+                let truncated = if r.content.len() > 200 {
+                    format!("{}...", &r.content[..200])
+                } else {
+                    r.content
+                };
+                let relevance_pct = ((2.0 - r.distance) / 2.0 * 100.0).max(0.0);
+                KnowledgeSearchResultView {
+                    heading: r.heading,
+                    content: truncated,
+                    source_name: r.source_name,
+                    source_type: r.source_type,
+                    relevance_pct,
+                }
+            })
+            .collect(),
+        Err(e) => {
+            tracing::warn!("Vector search failed, falling back to text: {}", e);
+            text_search_fallback_knowledge(&db, &query, source_type_filter.as_deref())?
+        }
+    };
+
+    let template = KnowledgeSearchResultsTemplate { results, query };
+    Ok(template.into_response())
+}
+
+fn text_search_fallback_knowledge(
+    db: &DbPool,
+    query: &str,
+    source_type: Option<&str>,
+) -> Result<Vec<KnowledgeSearchResultView>, StatusCode> {
+    let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (sql, use_source_type) = if source_type.is_some() {
+        (
+            "SELECT source_name, source_type, heading, content FROM embedding_documents
+             WHERE source_type = ?1 AND (heading LIKE '%' || ?2 || '%' OR content LIKE '%' || ?2 || '%')
+             LIMIT 20",
+            true,
+        )
+    } else {
+        (
+            "SELECT source_name, source_type, heading, content FROM embedding_documents
+             WHERE heading LIKE '%' || ?1 || '%' OR content LIKE '%' || ?1 || '%'
+             LIMIT 20",
+            false,
+        )
+    };
+
+    let mut stmt = conn.prepare(sql).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let map_row = |row: &rusqlite::Row| -> rusqlite::Result<KnowledgeSearchResultView> {
+        let content: String = row.get(3)?;
+        let truncated = if content.len() > 200 {
+            format!("{}...", &content[..200])
+        } else {
+            content
+        };
+        Ok(KnowledgeSearchResultView {
+            source_name: row.get(0)?,
+            source_type: row.get(1)?,
+            heading: row.get(2)?,
+            content: truncated,
+            relevance_pct: 0.0,
+        })
+    };
+
+    let results: Vec<KnowledgeSearchResultView> = if use_source_type {
+        stmt.query_map(params![source_type.unwrap_or(""), query], map_row)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect()
+    } else {
+        stmt.query_map(params![query], map_row)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+
+    Ok(results)
+}
+
+/// GET /search?q= — unified command bar search across agents, errors, knowledge
+pub async fn unified_search(
+    Extension(db): Extension<DbPool>,
+    Query(params): Query<SearchParams>,
+) -> Result<Html<String>, StatusCode> {
+    let query = params.q.unwrap_or_default();
+    if query.trim().is_empty() {
+        return Ok(Html(String::new()));
+    }
+
+    let mut html = String::new();
+
+    // Synchronous DB queries in a block so conn is dropped before .await
+    {
+        let conn = db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Agents section
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, current_state, last_update_at FROM agents
+                 WHERE name LIKE '%' || ?1 || '%' ORDER BY last_update_at DESC NULLS LAST LIMIT 3",
+            )
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let agents: Vec<(String, String, String, Option<String>)> = stmt
+            .query_map(params![query], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                ))
+            })
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if !agents.is_empty() {
+            html.push_str(r#"<div class="search-group-label">Agents</div>"#);
+            for (id, name, status, last_update) in &agents {
+                let last_seen = last_update
+                    .as_deref()
+                    .map(crate::models::relative_time)
+                    .unwrap_or_else(|| "never".to_string());
+                html.push_str(&format!(
+                    r#"<a href="/agents/{}" class="search-result"><span class="search-result-name">{}</span><span class="badge badge-{}">{}</span><span class="search-result-meta">{}</span></a>"#,
+                    id, name, status, status, last_seen
+                ));
+            }
+        }
+
+        // Errors section
+        let mut stmt = conn
+            .prepare(
+                "SELECT a.id, a.name, e.message, e.created_at FROM errors e
+                 JOIN agents a ON e.agent_id = a.id
+                 WHERE e.message LIKE '%' || ?1 || '%'
+                 ORDER BY e.created_at DESC LIMIT 3",
+            )
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let errors: Vec<(String, String, String, String)> = stmt
+            .query_map(params![query], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                ))
+            })
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if !errors.is_empty() {
+            html.push_str(r#"<div class="search-group-label">Errors</div>"#);
+            for (agent_id, agent_name, message, timestamp) in &errors {
+                let time_str = crate::models::relative_time(timestamp);
+                let truncated = if message.len() > 60 {
+                    format!("{}...", &message[..60])
+                } else {
+                    message.clone()
+                };
+                html.push_str(&format!(
+                    r#"<a href="/agents/{}" class="search-result"><span class="search-result-name">{}</span><span class="search-result-detail">{}</span><span class="search-result-meta">{}</span></a>"#,
+                    agent_id, agent_name, truncated, time_str
+                ));
+            }
+        }
+    } // conn dropped here
+
+    // Knowledge section — async, needs conn dropped first
+    if query.len() > 3 {
+        if let Ok(results) = crate::embeddings::search(&db, &query, None, 3).await {
+            if !results.is_empty() {
+                html.push_str(r#"<div class="search-group-label">Knowledge</div>"#);
+                for r in results {
+                    let relevance_pct = ((2.0 - r.distance) / 2.0 * 100.0).max(0.0);
+                    html.push_str(&format!(
+                        r#"<div class="search-result"><span class="search-result-name">{}</span><span class="badge badge-info">{}</span><span class="search-result-meta">{:.0}%</span></div>"#,
+                        r.heading, r.source_name, relevance_pct
+                    ));
+                }
+            }
+        }
+    }
+
+    if html.is_empty() {
+        html = r#"<div class="search-empty">No results found</div>"#.to_string();
+    }
+
+    Ok(Html(html))
+}
+
+/// GET /settings/server-info — server info partial for settings page
+pub async fn server_info_partial(
+    Extension(db): Extension<DbPool>,
+) -> Result<Html<String>, StatusCode> {
+    let version = env!("CARGO_PKG_VERSION");
+    let uptime = crate::api::get_uptime_string();
+
+    let db_size = std::fs::metadata(
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "mcpolly.db".to_string()),
+    )
+    .map(|m| {
+        let bytes = m.len();
+        if bytes > 1_048_576 {
+            format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+        } else {
+            format!("{:.0} KB", bytes as f64 / 1024.0)
+        }
+    })
+    .unwrap_or_else(|_| "unknown".to_string());
+
+    let ollama_url =
+        std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string());
+    let ollama_model =
+        std::env::var("OLLAMA_EMBEDDING_MODEL").unwrap_or_else(|_| "all-minilm".to_string());
+    let _ = &db; // used for pool check if needed
+
+    let ollama_connected = reqwest::Client::new()
+        .head(&ollama_url)
+        .timeout(std::time::Duration::from_secs(2))
+        .send()
+        .await
+        .is_ok();
+
+    let ollama_status = if ollama_connected {
+        format!(
+            r#"<span style="color:var(--status-running-fg)">● Connected</span> ({})"#,
+            ollama_model
+        )
+    } else {
+        r#"<span style="color:var(--status-offline-fg)">○ Disconnected</span>"#.to_string()
+    };
+
+    let html = format!(
+        r#"<div class="card-header"><h2>Server</h2></div>
+<dl style="margin:0">
+  <div style="display:flex;gap:24px;flex-wrap:wrap">
+    <div><dt class="text-muted" style="font-size:11px;text-transform:uppercase">Version</dt><dd style="font-weight:600">{}</dd></div>
+    <div><dt class="text-muted" style="font-size:11px;text-transform:uppercase">Uptime</dt><dd style="font-weight:600">{}</dd></div>
+    <div><dt class="text-muted" style="font-size:11px;text-transform:uppercase">Database</dt><dd style="font-weight:600">{}</dd></div>
+    <div><dt class="text-muted" style="font-size:11px;text-transform:uppercase">Ollama</dt><dd style="font-weight:600">{}</dd></div>
+  </div>
+</dl>"#,
+        version, uptime, db_size, ollama_status
+    );
+
+    Ok(Html(html))
+}
+
+/// GET /embeddings — redirect 301 to /knowledge
+pub async fn embeddings_redirect() -> Response {
+    Redirect::permanent("/knowledge").into_response()
+}
+
 // ─── Login / Logout ───
 
-/// GET /login
-pub async fn login_page() -> Response {
-    LoginTemplate { error: None }.into_response()
+/// GET /login — if a pending setup key exists, skip login and go straight to setup
+pub async fn login_page(
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    if crate::db::has_pending_setup_key() {
+        return Redirect::to("/setup").into_response();
+    }
+
+    LoginTemplate {
+        error: None,
+        reset_success: params.contains_key("reset"),
+    }
+    .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -1120,9 +1861,41 @@ pub async fn login_submit(
     } else {
         LoginTemplate {
             error: Some("Invalid API key.".to_string()),
+            reset_success: false,
         }
         .into_response()
     }
+}
+
+/// POST /reset-instance — revoke all keys, generate a new default, redirect to setup
+pub async fn reset_instance(Extension(db): Extension<DbPool>) -> Response {
+    let conn = db.get().expect("db connection");
+
+    let revoked: usize = conn
+        .execute("UPDATE api_keys SET revoked = 1", [])
+        .unwrap_or(0);
+    tracing::warn!("Instance reset: revoked {} API key(s)", revoked);
+
+    let new_key = crate::db::seed_default_key_if_empty(&conn);
+
+    if new_key.is_none() {
+        tracing::error!("Reset failed: could not generate a new key");
+    }
+
+    // Redirect straight to /setup — the pending key mechanism will
+    // auto-authenticate the user and show them the new key.
+    let mut builder = http::Response::builder()
+        .status(http::StatusCode::SEE_OTHER)
+        .header(http::header::LOCATION, "/setup");
+
+    for cookie in [
+        "mcpolly_key=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
+        "mcpolly_setup_complete=; Path=/; Max-Age=0",
+    ] {
+        builder = builder.header(http::header::SET_COOKIE, cookie);
+    }
+
+    builder.body(axum::body::Body::empty()).unwrap()
 }
 
 /// POST /logout — clear cookie, redirect to login
